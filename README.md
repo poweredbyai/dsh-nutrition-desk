@@ -45,7 +45,7 @@ DSH 里打开「插件」→「添加插件」，粘贴仓库地址或包目录�
 **方式二：命令行**
 
 ```bash
-dsh plugin --profile desktop add git+https://github.com/__OWNER__/dsh-nutrition-desk.git
+dsh plugin --profile desktop add git+https://github.com/poweredbyai/dsh-nutrition-desk.git
 ```
 
 已经有本地目录的话，也可以直接装目录：

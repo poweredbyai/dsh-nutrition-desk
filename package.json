@@ -51,14 +51,14 @@
     "video-account",
     "wechat-channels"
   ],
-  "author": "__OWNER__",
+  "author": "poweredbyai",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/__OWNER__/dsh-nutrition-desk.git"
+    "url": "git+https://github.com/poweredbyai/dsh-nutrition-desk.git"
   },
-  "homepage": "https://github.com/__OWNER__/dsh-nutrition-desk#readme",
+  "homepage": "https://github.com/poweredbyai/dsh-nutrition-desk#readme",
   "bugs": {
-    "url": "https://github.com/__OWNER__/dsh-nutrition-desk/issues"
+    "url": "https://github.com/poweredbyai/dsh-nutrition-desk/issues"
   },
   "license": "MIT"
 }
