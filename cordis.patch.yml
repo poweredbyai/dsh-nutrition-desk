@@ -1,0 +1,4 @@
+# dsh-nutrition-desk bundle patch：同一个包提供 host 半片（HTTP 路由）与浏览器半片（侧栏面板）
+- insert:
+    - id: nutrition-desk
+      name: 'dsh-nutrition-desk'

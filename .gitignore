@@ -1,0 +1,12 @@
+node_modules/
+.DS_Store
+*.log
+dist/
+preview/
+dev-card/
+shots/
+_test_url.txt
+_debug_url.txt
+.idea/
+.vscode/
+*.tmp

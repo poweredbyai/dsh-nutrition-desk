@@ -1,0 +1,64 @@
+{
+  "name": "dsh-nutrition-desk",
+  "version": "0.1.0",
+  "description": "三餐营养师 · DeepSeek Harness 插件：填一次个人档案，输入当餐吃了什么，生成营养分析、改进建议和引导投稿三张视频号图文和一段可直接发布的文案，可保存到本地。",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "icon": "./icon.svg",
+  "files": [
+    "index.js",
+    "client.js",
+    "src",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "docs",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime"
+      ]
+    }
+  },
+  "engines": {
+    "node": ">=20",
+    "dsh": ">=0.2.1-rc.5 <0.3.0"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "dsh-plugin",
+    "nutrition",
+    "video-account",
+    "wechat-channels"
+  ],
+  "author": "__OWNER__",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/__OWNER__/dsh-nutrition-desk.git"
+  },
+  "homepage": "https://github.com/__OWNER__/dsh-nutrition-desk#readme",
+  "bugs": {
+    "url": "https://github.com/__OWNER__/dsh-nutrition-desk/issues"
+  },
+  "license": "MIT"
+}
