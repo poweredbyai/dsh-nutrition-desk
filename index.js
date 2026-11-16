@@ -893,9 +893,23 @@ async function saveCards(store, body) {
   return { path: folder, files: saved }
 }
 
-function openFolder(path) {
+/**
+ * 在系统文件管理器里打开保存目录。
+ * @param {string} folder - 已经保存过的目录。
+ * @returns {Promise<boolean>} 真的调起了资源管理器才返回 true。
+ */
+async function openFolder(folder) {
+  // 无界面环境（自动化测试 / 服务器）不要弹窗
+  if (process.env.NUTRITION_DESK_NO_OPEN === '1') return false
+  try {
+    await stat(folder)
+  } catch {
+    // 目录被移走或删掉了：别让资源管理器弹「位置不可用」，交给面板提示
+    return false
+  }
   const command = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer' : 'xdg-open'
-  execFile(command, [path], () => {})
+  execFile(command, [folder], () => {})
+  return true
 }
 
 // ---------------------------------------------------------------------------
@@ -1015,7 +1029,8 @@ async function route(ctx, store, req, res) {
       const state = await store.read()
       const savedPath = body && body.from === 'last-analyze' ? state.last?.savedPath : state.savedPath
       if (!savedPath) return json(res, 400, { error: '还没有保存过图片' })
-      openFolder(savedPath)
+      const opened = await openFolder(savedPath)
+      if (!opened) return json(res, 400, { error: '这个文件夹已经不在了，重新点一次「保存到电脑」就好', path: savedPath })
       return json(res, 200, { path: savedPath })
     }
     default: return json(res, 404, { error: '接口不存在' })

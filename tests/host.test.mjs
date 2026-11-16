@@ -9,6 +9,8 @@ const root = await mkdtemp(join(tmpdir(), 'nutrition-desk-test-'))
 process.env.DSH_HOME = join(root, 'dsh-home')
 process.env.USERPROFILE = join(root, 'user')
 process.env.HOME = join(root, 'user')
+// 测试里绝不弹资源管理器（否则会对着临时目录弹「位置不可用」）
+process.env.NUTRITION_DESK_NO_OPEN = '1'
 
 const { apply } = await import('../index.js')
 
@@ -340,9 +342,24 @@ test('POST save 写入四张 PNG + 文案并记录路径', async () => {
   assert.match(text, /#AI说餐谱/)
   const bytes = await readFile(join(saved.json.path, '01-封面.png'))
   assert.equal(bytes.subarray(0, 4).toString('hex'), '89504e47')
+  // NUTRITION_DESK_NO_OPEN=1 时只回报路径，不真的调起资源管理器
   const revealed = await call(handler, 'POST', '/reveal', { from: 'last-analyze' })
-  assert.equal(revealed.status, 200)
+  assert.equal(revealed.status, 400)
   assert.equal(revealed.json.path, saved.json.path)
+  assert.match(revealed.json.error, /重新点一次/)
+})
+
+test('目录被删掉后 reveal 不再弹「位置不可用」', async () => {
+  const { handler } = makeCtx()
+  await call(handler, 'POST', '/analyze', { type: '早餐', text: '鸡蛋一个+玉米一根', profile: PROFILE })
+  const saved = await call(handler, 'POST', '/save', {
+    files: [{ kind: 'p1', name: '01-封面', png: SAMPLE_PNG }],
+  })
+  await rm(saved.json.path, { recursive: true, force: true })
+  const revealed = await call(handler, 'POST', '/reveal', {})
+  assert.equal(revealed.status, 400)
+  assert.equal(revealed.json.path, saved.json.path)
+  assert.match(revealed.json.error, /已经不在了/)
 })
 
 test('save 拒绝伪造的图片数据', async () => {

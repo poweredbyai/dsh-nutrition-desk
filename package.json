@@ -1,6 +1,6 @@
 {
   "name": "dsh-nutrition-desk",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "三餐营养师 · DeepSeek Harness 插件：填一次个人档案，输入当餐吃了什么，生成封面、盘子、体检、改一处四页视频号图文和一段可直接发布的文案，可保存到本地。",
   "type": "module",
   "main": "index.js",
