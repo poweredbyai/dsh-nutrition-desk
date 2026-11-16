@@ -1,8 +1,8 @@
-// Host 半片的接口测试：不启动真正的 Harness，只构造一个最小的 ctx 把路由跑起来。
+// Host 半片 v2（四页图文）的接口测试。
 import { mkdtemp, readFile, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { after, before, test } from 'node:test'
+import { after, test } from 'node:test'
 import assert from 'node:assert/strict'
 
 const root = await mkdtemp(join(tmpdir(), 'nutrition-desk-test-'))
@@ -12,7 +12,6 @@ process.env.HOME = join(root, 'user')
 
 const { apply } = await import('../index.js')
 
-/** 一个假 ctx：记录 webServer 注册，按需提供模型。 */
 function makeCtx({ llm, selection } = {}) {
   const routes = []
   const ctx = {
@@ -32,7 +31,7 @@ function makeCtx({ llm, selection } = {}) {
 
 function mockRequest(method, path, body, extraHeaders = {}) {
   const payload = body === undefined ? undefined : Buffer.from(JSON.stringify(body))
-  const req = {
+  return {
     method,
     url: `/nutrition-desk${path}`,
     headers: { 'content-type': 'application/json', 'sec-fetch-site': 'same-origin', ...extraHeaders },
@@ -40,7 +39,6 @@ function mockRequest(method, path, body, extraHeaders = {}) {
       if (payload) yield payload
     },
   }
-  return req
 }
 
 function mockResponse() {
@@ -66,41 +64,65 @@ const SAMPLE_PNG = `data:image/png;base64,${Buffer.concat([
   Buffer.from('fake-image-bytes'),
 ]).toString('base64')}`
 
-const GOOD_RESULT = {
-  headline: '蛋白质够了，蔬菜缺位',
-  score: 66,
-  summary: '这一餐热量不高，蛋白质勉强达标，但几乎没有蔬菜和钙，上午容易饿。',
-  energy: { kcal: 428, ratio: 24, note: '约全天目标 1800 kcal 的 24%' },
-  macros: [
-    { name: '蛋白质', value: '18g', percent: 72, tone: 'good' },
-    { name: '碳水', value: '52g', percent: 88, tone: 'good' },
-    { name: '脂肪', value: '14g', percent: 40, tone: 'low' },
-    { name: '纤维', value: '3g', percent: 18, tone: 'low' },
-  ],
-  strengths: ['鸡蛋给了优质蛋白', '热量控制得不错'],
-  gaps: ['几乎没有蔬菜', '缺一份奶类或豆制品'],
-  advice: {
-    headline: '下一餐补三样就够',
-    items: [
-      { title: '加一份绿叶菜', detail: '西兰花或油菜一小碗，补上纤维和叶酸。' },
-      { title: '补一份奶类', detail: '无糖酸奶一杯，钙和蛋白质一起补上。' },
-      { title: '换掉精致主食', detail: '白粥换杂粮粥，上午血糖更稳。' },
+/** 模型应该返回的四页内容（对照 docs/nutrition-desk-v2-cards.md）。 */
+const DECK = {
+  score: 62,
+  cover: {
+    lines: ['一份鸡蛋肠', '蛋白只有 12 克'],
+    emphasis: '只有 12 克',
+    sub: ['肠粉没错，错在你只吃了它。', '热量不高，材料不够。'],
+  },
+  plate: {
+    title: '四分之三是米浆',
+    mine: [
+      { label: '米浆', pct: 74, tone: 'carb' },
+      { label: '蛋白', pct: 26, tone: 'protein' },
     ],
-    swap: '白粥 → 杂粮粥 + 一个水煮蛋',
-    nextMeal: '明天早餐：鸡蛋 + 玉米 + 无糖酸奶 + 一小把圣女果',
+    insight: { text: '区别只有一处：你这边没有绿色。', bold: '你这边没有绿色。' },
   },
-  invite: {
-    question: '今天你吃了什么？',
-    lines: ['我把三餐记在这里，已经第 12 天。', '把你的三餐发到评论区，我帮你看缺口。'],
-    cta: '评论区晒出你今天的早餐',
-    tags: ['#一日三餐', '#营养记录', '#今天吃什么'],
+  exam: {
+    title: '三样里，两样是零',
+    rows: [
+      { label: '蛋白质', value: 12 },
+      { label: '蔬菜', value: 0 },
+      { label: '全谷物', value: 0 },
+    ],
+    insight: '热量没超，材料没给。',
+    say: { text: '米浆升得快、掉得也快。十点心慌，不是饿，是结构不对。', bold: '十点心慌，不是饿，是结构不对。' },
   },
-  post: {
-    title: '鸡蛋加玉米，蛋白够了纤维偏少',
-    body: '今天早餐就一个鸡蛋加一根玉米，吃完挺清爽，但上午十点多就有点饿了。AI 说这餐蛋白勉强够，纤维和钙都缺，主食也偏单一。明天准备加一杯无糖酸奶和一小把圣女果，看看会不会更扛饿。你早餐一般吃什么？',
+  fix: {
+    title: '加一个蛋、一杯豆浆',
+    rows: [
+      { title: '加 1 个蛋 + 1 杯无糖豆浆', result: '蛋白 12g → 27g' },
+      { title: '抓把小番茄或半根黄瓜', result: '蔬菜 0 → 100g' },
+      { title: '酱汁少淋一半', result: '钠少一半' },
+    ],
+    why: { text: '肠粉不用戒，一天一次。改的是结构，不是口味。', bold: '改的是结构，不是口味。' },
+    faq: { q: '不爱喝豆浆？', a: { text: '换 300ml 纯牛奶，蛋白一样。', bold: '纯牛奶' } },
+    ask: {
+      q: '你早餐是「只有主食」，还是「主食＋蛋白」？',
+      options: ['① 只有主食', '② 主食＋蛋白'],
+      hint: '评论区说一声。',
+    },
   },
-  caption: '早餐鸡蛋+玉米，蛋白质够了，但蔬菜和奶类缺位。你的早餐呢？#一日三餐 #营养记录',
+  caption: {
+    title: '早餐吃肠粉的都看看：蛋白只有 12 克',
+    lines: ['今天早餐：一份鸡蛋肠。', '蛋白 12 克，蔬菜 0 克。', '热量不高，材料不对。', '加一个蛋、一杯豆浆，蛋白到 27 克。'],
+  },
 }
+
+const PROFILE = { name: 'AI说食谱', gender: 'male', age: 42, height: 175, weight: 67, activity: 'sedentary', goal: 'health' }
+
+const llmReturning = payload => ({
+  async prepareCall(config) {
+    return {
+      config,
+      async *stream() {
+        yield { type: 'text-delta', text: typeof payload === 'string' ? payload : JSON.stringify(payload) }
+      },
+    }
+  },
+})
 
 after(async () => {
   await rm(root, { recursive: true, force: true })
@@ -141,7 +163,7 @@ test('档案缺基础信息时拒绝保存', async () => {
   assert.match(body.error, /年龄/)
 })
 
-test('POST analyze 走模型：提示词包含档案与本餐目标，输出被规范化', async () => {
+test('POST analyze 产出四页结构：封面/盘子/体检/改一处/文案', async () => {
   let seen = null
   const llm = {
     async prepareCall(config) {
@@ -149,88 +171,147 @@ test('POST analyze 走模型：提示词包含档案与本餐目标，输出被�
         config,
         async *stream(request) {
           seen = request
-          yield { type: 'text-delta', text: JSON.stringify(GOOD_RESULT) }
+          yield { type: 'text-delta', text: JSON.stringify(DECK) }
         },
       }
     },
   }
   const { handler } = makeCtx({ llm, selection: { provider: 'deepseek-account', model: 'deepseek-flash' } })
-  const { status, json: body } = await call(handler, 'POST', '/analyze', { type: '早餐', text: '鸡蛋一个+玉米一根', profile: { name: '小满', gender: 'male', age: 42, height: 175, weight: 67, activity: 'sedentary', goal: 'health' } })
+  const { status, json: body } = await call(handler, 'POST', '/analyze', { type: '早餐', text: '早餐，一份鸡蛋肠', profile: PROFILE })
   assert.equal(status, 200)
   assert.equal(body.fallback, false)
-  assert.equal(body.result.mealType, '早餐')
-  assert.equal(body.result.headline, '蛋白质够了，蔬菜缺位')
-  assert.equal(body.result.energy.kcal, 428)
-  // 占比与 note 由 Host 按热量重算，保证和卡面进度条一致
-  assert.equal(body.result.energy.ratio, Math.round((428 / body.result.targets.kcal) * 100))
-  assert.match(body.result.energy.note, /^约占全天目标 \d+ kcal 的 \d+%$/)
-  assert.ok(body.result.energy.note.includes(`${body.result.energy.ratio}%`))
-  assert.equal(body.result.macros.length, 4)
-  assert.equal(body.result.advice.items.length, 3)
-  assert.equal(body.result.invite.tags.length, 3)
-  // 图文文案：标题带餐次标签、正文、备注、四个固定话题
-  assert.equal(body.result.post.title, '鸡蛋加玉米，蛋白够了纤维偏少 #早餐')
-  assert.match(body.result.post.body, /无糖酸奶/)
-  assert.equal(body.result.post.remark, '备注：男、42岁、175cm、67kg')
-  assert.deepEqual(body.result.post.tags, ['#AI说餐谱', '#早餐', '#上班族', '#久坐族'])
-  assert.equal(body.result.post.text, `${body.result.post.title}\n\n${body.result.post.lines.join('\n')}\n\n${body.result.post.remark}\n\n${body.result.post.tags.join(' ')}`)
-  // 正文一句一行：每行都以标点结尾
-  assert.ok(body.result.post.lines.length >= 4, `lines ${body.result.post.lines.length}`)
-  assert.ok(body.result.post.lines.every(line => /[，。！？；、,.!?;]$/.test(line)), body.result.post.lines.join(' | '))
-  assert.equal(body.result.post.lines.join(''), body.result.post.body)
-  assert.ok(body.result.post.text.startsWith(body.result.post.title))
-  assert.ok(body.result.post.text.includes(body.result.post.remark))
-  assert.ok(body.result.post.text.includes('#AI说餐谱'))
-  // 提示词里应该带着算好的每日/本餐参考值
-  assert.match(seen.system, /只输出一个 JSON/)
+  const r = body.result
+  assert.equal(r.version, 2)
+  // 封面
+  assert.deepEqual(r.cover.lines, ['一份鸡蛋肠', '蛋白只有 12 克'])
+  assert.equal(r.cover.emphasis, '只有 12 克')
+  assert.equal(r.cover.sub.length, 2)
+  // 盘子：mine 归一到 100，guide 固定三项
+  assert.ok(r.plate.mine.reduce((sum, row) => sum + row.pct, 0) === 100)
+  assert.deepEqual(r.plate.guide, [
+    { label: '菜', pct: 50, tone: 'veg' },
+    { label: '谷薯', pct: 25, tone: 'carb' },
+    { label: '蛋白', pct: 25, tone: 'protein' },
+  ])
+  // 体检：三行；建议值和状态由 Host 算
+  assert.equal(r.exam.rows.length, 3)
+  const [protein, veg, grain] = r.exam.rows
+  assert.equal(protein.label, '蛋白质')
+  assert.equal(protein.value, 12)
+  assert.equal(protein.tone, 'mid')
+  assert.equal(protein.status, '差一点')
+  assert.match(protein.target[1], /全天 80g 的三分之一/)
+  assert.equal(veg.tone, 'low')
+  assert.equal(veg.status, '空的')
+  assert.equal(veg.percent, 0)
+  assert.equal(grain.value, 0)
+  // 改一处：三条，第一条 strong
+  assert.equal(r.fix.rows.length, 3)
+  assert.equal(r.fix.rows[0].strong, true)
+  assert.equal(r.fix.rows[1].strong, false)
+  assert.equal(r.fix.rows[0].no, '01')
+  assert.equal(r.fix.ask.options.length, 2)
+  // 文案：标题 + 一句一行 + 四个话题，且没有备注行
+  assert.equal(r.post.title, '早餐吃肠粉的都看看：蛋白只有 12 克')
+  assert.equal(r.post.lines.length, 4)
+  assert.deepEqual(r.post.tags, ['#AI说餐谱', '#早餐', '#上班族', '#久坐族'])
+  assert.ok(!r.post.text.includes('备注'))
+  assert.ok(r.post.text.includes('#AI说餐谱'))
+  // 提示词带上本餐参考
+  assert.match(seen.system, /四页图文/)
   assert.match(seen.messages[0].content[0].text, /本餐参考/)
-  assert.match(seen.messages[0].content[0].text, /鸡蛋一个\+玉米一根/)
 })
 
-test('模型返回超长内容时全部截断到契约上限', async () => {
-  const bloated = JSON.parse(JSON.stringify(GOOD_RESULT))
-  bloated.headline = '这是一条非常非常长的大标题超过十四个汉字还要继续写下去'
-  bloated.summary = '这是一段很长的总结'.repeat(20)
-  bloated.strengths = ['做对的点'.repeat(20), '第二个'.repeat(30), '多余的第三条']
-  bloated.gaps = []
-  bloated.macros = [{ name: '蛋白质', value: '十八克蛋白质真不少', percent: 999, tone: 'nonsense' }]
-  bloated.advice.items = Array.from({ length: 8 }, (_, i) => ({ title: `动作${i}`, detail: '细节'.repeat(40) }))
-  bloated.invite.tags = ['没有井号的话题', '第二个', '第三个', '第四个']
-  bloated.caption = '配文'.repeat(200)
-  const llm = { async prepareCall(config) { return { config, async *stream() { yield { type: 'text-delta', text: JSON.stringify(bloated) } } } } }
-  const { handler } = makeCtx({ llm, selection: { provider: 'p', model: 'm' } })
+test('强调片段不在原文里时会被丢掉，不报错', async () => {
+  const broken = JSON.parse(JSON.stringify(DECK))
+  broken.cover.emphasis = '不存在的片段'
+  broken.plate.insight.bold = '也不存在'
+  broken.fix.why.bold = '还是没有'
+  const { handler } = makeCtx({ llm: llmReturning(broken), selection: { provider: 'p', model: 'm' } })
+  const { json: body } = await call(handler, 'POST', '/analyze', { type: '早餐', text: '鸡蛋一个' })
+  assert.equal(body.result.cover.emphasis, '')
+  assert.equal(body.result.plate.insight.bold, '')
+  assert.equal(body.result.fix.why.bold, '')
+})
+
+test('模型返回超长内容时全部截断到卡片上限', async () => {
+  const bloated = {
+    score: 70,
+    cover: {
+      lines: ['这一行特别特别长超过十个字了', '第二行也特别特别长超过十个字了', '第三行多余'],
+      emphasis: '一'.repeat(20),
+      sub: ['第一句'.repeat(20), '第二句'.repeat(20), '第三句多余'],
+    },
+    plate: {
+      title: '这个标题明显超过了十个字的限制还要继续写',
+      mine: [
+        { label: '米饭和面条', pct: 40, tone: 'nonsense' },
+        { label: '蛋白质', pct: 30, tone: 'protein' },
+        { label: '蔬菜', pct: 30, tone: 'veg' },
+        { label: '第四个', pct: 10, tone: 'carb' },
+      ],
+      insight: { text: '很长的一句话'.repeat(10), bold: '很长的一句话' },
+    },
+    exam: {
+      title: '这个标题也超过十个字了',
+      rows: [{ label: '蛋白质', value: 99999 }, { label: '蔬菜', value: -5 }],
+      insight: '这一句点评明显超过十四个字了还不止',
+      say: { text: '体感'.repeat(59), bold: '体感' },
+    },
+    fix: {
+      title: '这个动作标题超过十二个字还要继续写下去',
+      rows: [{ title: '动作'.repeat(20), result: '结果'.repeat(20) }, { title: '' }, {}, {}, {}],
+      why: { text: '表态'.repeat(30), bold: '表态' },
+      faq: { q: '问题超过十个字了', a: { text: '答案'.repeat(20), bold: '答案' } },
+      ask: { q: '问题'.repeat(30), options: ['① 选项一很长很长', '② 选项二很长很长', '③ 多余'], hint: '提示'.repeat(20) },
+    },
+    caption: { title: '标题'.repeat(30), lines: ['一句'.repeat(30), '', '第三句', '第四句', '第五句', '第六句', '第七句'] },
+  }
+  const { handler } = makeCtx({ llm: llmReturning(bloated), selection: { provider: 'p', model: 'm' } })
   const { status, json: body } = await call(handler, 'POST', '/analyze', { type: '午餐', text: '米饭一碗+红烧肉三块' })
   assert.equal(status, 200)
   const r = body.result
-  assert.ok(r.headline.length <= 16, `headline ${r.headline.length}`)
-  assert.ok(r.summary.length <= 56, `summary ${r.summary.length}`)
-  assert.ok(r.strengths.length === 2 && r.strengths.every(s => s.length <= 16))
-  assert.ok(r.gaps.length === 2 && r.gaps.every(s => s.length > 0))
-  assert.ok(r.macros.length === 4 && r.macros.every(m => m.percent <= 130 && ['good', 'watch', 'low'].includes(m.tone)))
-  assert.ok(r.advice.items.length === 3)
-  assert.ok(r.advice.items.every(item => item.title.length <= 10 && item.detail.length <= 34))
-  assert.ok(r.invite.tags.length === 3 && r.invite.tags.every(tag => tag.startsWith('#')))
-  assert.ok(r.caption.length <= 120)
-  assert.equal(r.macros[0].name, '蛋白质')
+  assert.equal(r.cover.lines.length, 2)
+  assert.ok(r.cover.lines.every(line => line.length <= 10))
+  assert.equal(r.cover.sub.length, 2)
+  assert.ok(r.cover.sub.every(line => line.length <= 15))
+  assert.ok(r.plate.title.length <= 12)
+  assert.ok(r.plate.mine.length <= 3)
+  assert.ok(r.plate.mine.every(row => row.label.length <= 5 && ['veg', 'carb', 'protein'].includes(row.tone)))
+  assert.equal(r.plate.mine.reduce((sum, row) => sum + row.pct, 0), 100)
+  assert.equal(r.exam.rows.length, 3)
+  assert.equal(r.exam.rows[0].value, 2000)
+  assert.equal(r.exam.rows[1].value, 0)
+  assert.ok(r.exam.rows.every(row => row.percent >= 0 && row.percent <= 100))
+  assert.ok(r.exam.insight.length <= 16)
+  assert.equal(r.fix.rows.length, 3)
+  assert.ok(r.fix.rows.every(row => row.title.length <= 15 && row.result.length <= 13))
+  assert.ok(r.fix.title.length <= 13)
+  assert.ok(r.fix.ask.options.length === 2)
+  assert.ok(r.post.title.length <= 21)
+  assert.ok(r.post.lines.length <= 6)
+  assert.ok(r.post.lines.every(line => line.length <= 24))
 })
 
-test('模型输出不是 JSON 时降级为本地估算并带上提示', async () => {
-  const llm = { async prepareCall(config) { return { config, async *stream() { yield { type: 'text-delta', text: '抱歉，我无法完成。' } } } } }
-  const { handler } = makeCtx({ llm, selection: { provider: 'p', model: 'm' } })
-  const { status, json: body } = await call(handler, 'POST', '/analyze', { type: '晚餐', text: '面条一碗+两个鸡蛋' })
+test('模型输出不是 JSON 时降级为本地估算，仍是四页结构', async () => {
+  const { handler } = makeCtx({ llm: llmReturning('抱歉，我无法完成。'), selection: { provider: 'p', model: 'm' } })
+  const { status, json: body } = await call(handler, 'POST', '/analyze', { type: '晚餐', text: '面条一碗+两个鸡蛋', profile: PROFILE })
   assert.equal(status, 200)
   assert.equal(body.fallback, true)
   assert.match(body.notice, /食物表/)
-  assert.equal(body.result.mealType, '晚餐')
-  assert.ok(body.result.energy.kcal > 0)
+  assert.equal(body.result.version, 2)
+  assert.equal(body.result.exam.rows.length, 3)
+  assert.equal(body.result.fix.rows.length, 3)
+  assert.ok(body.result.cover.lines.length === 2)
 })
 
 test('没有模型时直接走本地估算', async () => {
   const { handler } = makeCtx()
-  const { json: body } = await call(handler, 'POST', '/analyze', { type: '早餐', text: '早餐，鸡蛋一个+玉米一根' })
+  const { json: body } = await call(handler, 'POST', '/analyze', { type: '早餐', text: '早餐，鸡蛋一个+玉米一根', profile: PROFILE })
   assert.equal(body.fallback, true)
   assert.equal(body.result.mealText, '早餐，鸡蛋一个+玉米一根')
-  assert.ok(body.result.advice.items.length === 3)
+  assert.equal(body.result.plate.guide.length, 3)
+  assert.ok(body.result.post.text.includes('#AI说餐谱'))
 })
 
 test('空餐次输入被拒绝', async () => {
@@ -239,26 +320,25 @@ test('空餐次输入被拒绝', async () => {
   assert.equal(status, 400)
 })
 
-test('POST save 写入 PNG 并记录路径，reveal 用服务端记录的路径', async () => {
+test('POST save 写入四张 PNG + 文案并记录路径', async () => {
   const { handler } = makeCtx()
-  await call(handler, 'POST', '/analyze', { type: '早餐', text: '鸡蛋一个+玉米一根' })
+  await call(handler, 'POST', '/analyze', { type: '早餐', text: '鸡蛋一个+玉米一根', profile: PROFILE })
   const saved = await call(handler, 'POST', '/save', {
     files: [
-      { kind: 'analysis', name: '01-营养分析', png: SAMPLE_PNG },
-      { kind: 'advice', name: '02-改进建议', png: SAMPLE_PNG },
-      { kind: 'invite', name: '03-引导投稿', png: SAMPLE_PNG },
+      { kind: 'p1', name: '01-封面', png: SAMPLE_PNG },
+      { kind: 'p2', name: '02-盘子', png: SAMPLE_PNG },
+      { kind: 'p3', name: '03-体检', png: SAMPLE_PNG },
+      { kind: 'p4', name: '04-改一处', png: SAMPLE_PNG },
     ],
-    texts: [{ name: '04-图文文案.md', content: '# 标题\n\n正文\n\n备注：男、42岁、175cm、67kg\n\n#AI说餐谱 #早餐' }],
+    texts: [{ name: '05-图文文案.md', content: '标题\n\n正文\n\n#AI说餐谱 #早餐' }],
   })
   assert.equal(saved.status, 200)
-  assert.equal(saved.json.files.length, 4)
-  assert.deepEqual(saved.json.files, ['01-营养分析.png', '02-改进建议.png', '03-引导投稿.png', '04-图文文案.md'])
-  const info = await stat(join(saved.json.path, '01-营养分析.png'))
+  assert.deepEqual(saved.json.files, ['01-封面.png', '02-盘子.png', '03-体检.png', '04-改一处.png', '05-图文文案.md'])
+  const info = await stat(join(saved.json.path, '01-封面.png'))
   assert.ok(info.size > 8)
-  const text = await readFile(join(saved.json.path, '04-图文文案.md'), 'utf8')
-  assert.match(text, /备注：男、42岁、175cm、67kg/)
+  const text = await readFile(join(saved.json.path, '05-图文文案.md'), 'utf8')
   assert.match(text, /#AI说餐谱/)
-  const bytes = await readFile(join(saved.json.path, '01-营养分析.png'))
+  const bytes = await readFile(join(saved.json.path, '01-封面.png'))
   assert.equal(bytes.subarray(0, 4).toString('hex'), '89504e47')
   const revealed = await call(handler, 'POST', '/reveal', { from: 'last-analyze' })
   assert.equal(revealed.status, 200)
@@ -280,16 +360,13 @@ test('拒绝跨站写请求', async () => {
   assert.equal(status, 403)
 })
 
-test('下一餐建议去掉卡路里数字', async () => {
-  const withKcal = {
-    ...GOOD_RESULT,
-    advice: { ...GOOD_RESULT.advice, nextMeal: '午餐加一份瘦肉或鱼（约 561 kcal），配两拳头蔬菜' },
-  }
-  const llm = { async prepareCall(config) { return { config, async *stream() { yield { type: 'text-delta', text: JSON.stringify(withKcal) } } } } }
-  const { handler } = makeCtx({ llm, selection: { provider: 'p', model: 'm' } })
+test('建议里的卡路里数字被剥掉', async () => {
+  const withKcal = JSON.parse(JSON.stringify(DECK))
+  withKcal.fix.rows[0].result = '蛋白 12g → 27g（约 561 kcal）'
+  const { handler } = makeCtx({ llm: llmReturning(withKcal), selection: { provider: 'p', model: 'm' } })
   const { json: body } = await call(handler, 'POST', '/analyze', { type: '午餐', text: '米饭一碗+红烧肉三块' })
-  assert.ok(!/kcal|千卡|大卡/i.test(body.result.advice.nextMeal), body.result.advice.nextMeal)
-  assert.ok(body.result.advice.nextMeal.includes('蔬菜'))
+  assert.ok(!/kcal|千卡|大卡/i.test(body.result.fix.rows[0].result), body.result.fix.rows[0].result)
+  assert.ok(body.result.fix.rows[0].result.includes('27g'))
 })
 
 test('未知路由 404', async () => {
@@ -300,20 +377,33 @@ test('未知路由 404', async () => {
 
 test('GET state 返回每日三餐得分历史', async () => {
   const { handler } = makeCtx()
-  await call(handler, 'POST', '/analyze', { type: '早餐', text: '鸡蛋一个+玉米一根' })
-  await call(handler, 'POST', '/analyze', { type: '午餐', text: '米饭一碗+红烧肉三块' })
+  await call(handler, 'POST', '/analyze', { type: '早餐', text: '鸡蛋一个+玉米一根', profile: PROFILE })
+  await call(handler, 'POST', '/analyze', { type: '午餐', text: '米饭一碗+红烧肉三块', profile: PROFILE })
   const { status, json: body } = await call(handler, 'GET', '/state')
   assert.equal(status, 200)
   assert.ok(Array.isArray(body.history) && body.history.length >= 1)
   const day = body.history[body.history.length - 1]
-  assert.ok(day.date)
-  assert.ok(day.label)
-  assert.ok(day.weekday)
+  assert.ok(day.date && day.label && day.weekday)
   assert.ok(Array.isArray(day.meals) && day.meals.length >= 2)
-  assert.ok(day.meals.every(meal => meal.type && Number.isFinite(meal.score)))
   assert.ok(Number.isFinite(day.average))
   assert.ok(body.historySummary.count >= 2)
-  assert.ok(body.historySummary.best >= body.historySummary.worst)
+  assert.equal(body.result.version, 2)
+})
+
+test('GET state 不回填旧版（没有 version 2）的结果', async () => {
+  const { handler } = makeCtx()
+  // 直接写一份 v1 老数据进存储
+  const { mkdir, writeFile } = await import('node:fs/promises')
+  const file = join(root, 'dsh-home', 'nutrition-desk', 'state.json')
+  await mkdir(join(root, 'dsh-home', 'nutrition-desk'), { recursive: true })
+  await writeFile(file, JSON.stringify({
+    version: 1,
+    profile: PROFILE,
+    last: { type: '早餐', text: '旧数据', at: new Date().toISOString(), result: { headline: '旧的', score: 60 } },
+    meals: [],
+  }))
+  const { json: body } = await call(handler, 'GET', '/state')
+  assert.equal(body.result, null)
 })
 
 test('未鉴权时拒绝（没有 connection 服务）', async () => {
@@ -323,5 +413,4 @@ test('未鉴权时拒绝（没有 connection 服务）', async () => {
   await routes[0].handler(mockRequest('GET', '/state'), res)
   assert.equal(out.statusCode, 403)
 })
-
 

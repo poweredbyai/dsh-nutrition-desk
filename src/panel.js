@@ -110,7 +110,7 @@ const panelCss = `
 .nu-banner-form{margin-top:14px;margin-bottom:0}
 .nu-banner-page{margin-top:20px;margin-bottom:0}
 
-.nu-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.nu-cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
 .nu-card{display:flex;flex-direction:column;min-width:0;border:1px solid var(--dsw-alias-border-l2);border-radius:14px;overflow:hidden;background:var(--dsw-alias-bg-base)}
 .nu-card-head{display:flex;align-items:center;gap:8px;padding:9px 10px 9px 13px;border-bottom:1px solid var(--dsw-alias-border-l1)}
 .nu-card-index{font-size:11px;font-variant-numeric:tabular-nums;color:var(--dsw-alias-label-secondary);letter-spacing:.04em}
@@ -118,6 +118,20 @@ const panelCss = `
 .nu-card-btn{margin-left:auto}
 .nu-canvas-wrap{position:relative;width:100%;aspect-ratio:3/4;background:color-mix(in srgb,var(--dsw-alias-label-primary) 4%,transparent)}
 .nu-canvas{display:block;width:100%;height:100%}
+.nu-legacy{display:flex;flex-direction:column;align-items:flex-start;gap:10px;padding:22px 20px;border:1px dashed var(--dsw-alias-border-l2);border-radius:14px;background:color-mix(in srgb,var(--dsw-alias-label-primary) 2%,transparent)}
+.nu-legacy-title{margin:0;font-size:14px;font-weight:650}
+.nu-legacy-desc{margin:0;font-size:13px;line-height:1.7;color:var(--dsw-alias-label-secondary)}
+
+/* 本餐照片（可选） */
+.nu-photo{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px;padding:12px 14px;border:1px solid var(--dsw-alias-border-l1);border-radius:12px;background:color-mix(in srgb,var(--dsw-alias-label-primary) 3%,transparent)}
+.nu-photo-thumb{width:96px;height:96px;flex:none;border-radius:10px;object-fit:cover;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-base);display:block}
+.nu-photo-main{flex:1 1 180px;min-width:0;display:flex;flex-direction:column;gap:3px}
+.nu-photo-title{font-size:12.5px;font-weight:600;color:var(--dsw-alias-label-primary)}
+.nu-photo-name{font-size:12.5px;color:var(--dsw-alias-label-primary);word-break:break-all}
+.nu-photo-hint{font-size:12px;line-height:1.55;color:var(--dsw-alias-label-secondary)}
+.nu-photo-actions{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.nu-file{display:none}
+.nu-photo-error{margin-top:8px;font-size:12px;line-height:1.5;color:var(--dsw-alias-state-error-primary)}
 
 .nu-post{display:flex;flex-direction:column;gap:10px;margin-top:16px;padding:16px 18px;border:1px solid var(--dsw-alias-border-l2);border-left:3px solid var(--dsw-alias-brand-primary);border-radius:12px;background:var(--dsw-alias-bg-layer-1)}
 .nu-post-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
@@ -181,7 +195,7 @@ const panelCss = `
 
 .nu-working{display:flex;align-items:center;gap:10px;margin-bottom:14px;padding:11px 14px;border-radius:11px;border:1px solid var(--dsw-alias-border-l1);background:color-mix(in srgb,var(--dsw-alias-label-primary) 3%,transparent);font-size:12.5px;color:var(--dsw-alias-label-secondary)}
 .nu-section[data-section="result"],.nu-section[data-section="score"],.nu-section[data-section="post"]{scroll-margin-top:116px}
-.nu-skeleton-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.nu-skeleton-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
 .nu-skel{position:relative;aspect-ratio:3/4;border-radius:14px;border:1px solid var(--dsw-alias-border-l2);background:color-mix(in srgb,var(--dsw-alias-label-primary) 7%,transparent);animation:nu-pulse 1.5s ease-in-out infinite}
 .nu-skel::after{content:"";position:absolute;inset:14% 10%;border-radius:8px;border:1px solid var(--dsw-alias-border-l2);opacity:.6}
 .nu-skeleton-row{display:flex;align-items:center;gap:8px;margin:12px 0 14px;font-size:12.5px;color:var(--dsw-alias-label-secondary)}
@@ -191,8 +205,8 @@ const panelCss = `
 .nu-loading-block.is-tall{height:220px}
 
 @media (max-width:1080px){
-  .nu-cards,.nu-skeleton-grid{grid-template-columns:minmax(0,1fr);justify-items:center}
-  .nu-card,.nu-skel{width:min(100%,460px)}
+  .nu-cards,.nu-skeleton-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .nu-card,.nu-skel{width:100%}
 }
 @media (max-width:760px){
   .nu-topbar-inner{padding:15px 20px 12px}
@@ -204,6 +218,7 @@ const panelCss = `
   .nu-section-head{padding:14px 15px}
   .nu-section-body{padding:16px 15px 18px}
   .nu-summary{padding:14px 15px}
+  .nu-cards,.nu-skeleton-grid{grid-template-columns:minmax(0,1fr);justify-items:center}
   .nu-card,.nu-skel{width:min(100%,420px)}
   .nu-post-actions{margin-left:0;width:100%}
   .nu-score-day{grid-template-columns:minmax(0,1fr);gap:8px}
@@ -250,9 +265,10 @@ const panelGoalOptions = [
 ];
 
 const panelCardMeta = [
-  { kind: 'analysis', name: '营养分析', label: '下载营养分析', file: '01-营养分析.png' },
-  { kind: 'advice', name: '改进建议', label: '下载改进建议', file: '02-改进建议.png' },
-  { kind: 'invite', name: '引导投稿', label: '下载引导投稿', file: '03-引导投稿.png' },
+  { kind: 'p1', name: '封面', label: '下载封面', file: '01-封面.png' },
+  { kind: 'p2', name: '盘子', label: '下载盘子', file: '02-盘子.png' },
+  { kind: 'p3', name: '体检', label: '下载体检', file: '03-体检.png' },
+  { kind: 'p4', name: '改一处', label: '下载改一处', file: '04-改一处.png' },
 ];
 
 const panelGenderLabel = { male: '男', female: '女' };
@@ -357,34 +373,67 @@ function panelDateText() {
   return now.getFullYear() + '年' + (now.getMonth() + 1) + '月' + now.getDate() + '日 ' + panelWeekdays[now.getDay()];
 }
 
-/** 卡片水印账号：优先用档案里填的自媒体账号，没有就回退到发布账号。 */
-const panelAccountFallback = '@AI说餐谱';
+/** 卡片账号：档案里的自媒体账号（纯文字、不带 @），空则回退到发布账号。 */
+const panelAccountFallback = 'AI说餐谱';
 
-function panelHandle(profile) {
+function panelAccountName(profile) {
   const name = profile && profile.name ? String(profile.name).trim() : '';
   if (!name) return panelAccountFallback;
-  return name.charAt(0) === '@' ? name : '@' + name;
+  return name.replace(/^@+/, '').trim() || panelAccountFallback;
+}
+
+/** 卡片左下身份行：42 岁 · 175cm · 67kg（模板不带性别） */
+function panelProfileLine(profile) {
+  const data = profile || {};
+  const head = [];
+  if (Number(data.age) > 0) head.push(Number(data.age) + ' 岁');
+  const parts = [];
+  if (head.length) parts.push(head.join(' '));
+  if (Number(data.height) > 0) parts.push(Number(data.height) + 'cm');
+  if (Number(data.weight) > 0) parts.push(Number(data.weight) + 'kg');
+  return parts.join(' · ');
+}
+
+/** 新版四页图文（p1-p4）才有 cover；旧结果没有。 */
+function panelHasDeck(result) {
+  return Boolean(result && result.cover && typeof result.cover === 'object');
+}
+
+/** 组装传给 cardDraw 的 data：Host 结果 + 面板本地字段（日期 / 账号 / 身份行 / 照片 / 原文）。 */
+function panelCardData(result, profile, mealType, text, photo) {
+  const base = result && typeof result === 'object' ? result : {};
+  return Object.assign({}, base, {
+    mealType: base.mealType || mealType,
+    date: panelDateText(),
+    account: panelAccountName(profile),
+    profileLine: panelProfileLine(profile),
+    photo: photo || null,
+    mealText: String(text || base.mealText || '').trim(),
+  });
 }
 
 /** 把接口返回的图文文案整理成可渲染的结构（旧数据没有 post 时用现有字段拼）。 */
 function panelPostOf(result, profile) {
   const data = result && result.post && typeof result.post === 'object' ? result.post : {};
   const mealType = (result && result.mealType) || '这一餐';
+  const deck = panelHasDeck(result);
   const p = profile || {};
   const gender = p.gender === 'male' ? '男' : p.gender === 'female' ? '女' : '';
   const title = String(data.title || '')
     || ((result && result.headline ? String(result.headline) : '这一餐吃得怎么样') + ' #' + mealType);
   const body = String(data.body || '')
     || (result && result.summary ? String(result.summary) : '');
+  // v2 不再输出「备注：性别、年龄…」那一行（身份已经在封面左下角）。
   const remark = String(data.remark || '')
-    || ['备注：' + (gender || '—'), (p.age || '—') + '岁', (p.height || '—') + 'cm', (p.weight || '—') + 'kg'].join('、');
+    || (deck ? '' : ['备注：' + (gender || '—'), (p.age || '—') + '岁', (p.height || '—') + 'cm', (p.weight || '—') + 'kg'].join('、'));
   const tags = (Array.isArray(data.tags) && data.tags.length ? data.tags : ['#AI说餐谱', '#' + mealType, '#上班族', '#久坐族'])
     .map(function (tag) { return String(tag); })
     .slice(0, 4);
   const lines = Array.isArray(data.lines) && data.lines.length
     ? data.lines.map(function (line) { return String(line); })
     : panelSplitClauses(body);
-  const text = String(data.text || '') || [title, lines.join('\n'), remark, tags.join(' ')].join('\n\n');
+  const text = String(data.text || '')
+    || [title, lines.join('\n'), remark, tags.join(' ')].filter(Boolean).join('\n\n');
   return { title: title, body: body, lines: lines, remark: remark, tags: tags, text: text };
 }
 
@@ -471,6 +520,23 @@ function panelDownloadCanvas(canvas, name) {
   });
 }
 
+/** 把本地照片对象解码成可画进 canvas 的 HTMLImageElement；失败返回 null（回退无照片版式）。 */
+async function panelDecodePhoto(photo) {
+  if (!photo || !photo.url) return null;
+  try {
+    if (photo.img && photo.img.src === photo.url) {
+      if (!photo.img.complete) await photo.img.decode();
+      return photo.img.naturalWidth > 0 ? photo.img : null;
+    }
+    const image = new Image();
+    image.src = photo.url;
+    await image.decode();
+    return image.naturalWidth > 0 ? image : null;
+  } catch (err) {
+    return null;
+  }
+}
+
 /** 复制文本：优先剪贴板 API，失败时退回 execCommand。 */
 async function panelCopyText(text) {
   const value = String(text == null ? '' : text);
@@ -544,20 +610,31 @@ function NutritionPanel() {
   const [downloading, setDownloading] = React.useState(false);
   const [copyState, setCopyState] = React.useState('');
 
+  // 生成这一餐时用的原文（编辑框之后可能被改，卡片仍用当次原文）
+  const [resultText, setResultText] = React.useState('');
+  // 本餐照片：只在浏览器本地使用，{ url, img, name }，不上传 Host
+  const [photo, setPhoto] = React.useState(null);
+  const [photoError, setPhotoError] = React.useState('');
+
   const resultRef = React.useRef(null);
   const copyTimerRef = React.useRef(0);
   const pendingScrollRef = React.useRef(false);
   const canvasARef = React.useRef(null);
   const canvasBRef = React.useRef(null);
   const canvasCRef = React.useRef(null);
+  const canvasDRef = React.useRef(null);
   const canvasRefs = React.useMemo(function () {
-    return [canvasARef, canvasBRef, canvasCRef];
-  }, [canvasARef, canvasBRef, canvasCRef]);
+    return [canvasARef, canvasBRef, canvasCRef, canvasDRef];
+  }, [canvasARef, canvasBRef, canvasCRef, canvasDRef]);
+  const fileInputRef = React.useRef(null);
+  const photoRef = React.useRef(null);
 
   const metrics = panelBodyMetrics(profile);
   const savedMetrics = panelBodyMetrics(savedProfile);
   const summaryChips = panelSummaryChips(savedProfile);
   const post = result ? panelPostOf(result, savedProfile || profile) : null;
+  const hasDeck = panelHasDeck(result);
+  const cardMealText = resultText || mealText.trim();
   const textLength = panelTextLength(mealText.trim());
   const canGenerate = textLength >= 3 && textLength <= 300 && !analyzing;
 
@@ -584,7 +661,10 @@ function NutritionPanel() {
         setExportDir(typeof data.exportDir === 'string' ? data.exportDir : '');
         const last = data.last && typeof data.last === 'object' ? data.last : null;
         if (last && panelMealTypes.indexOf(last.type) >= 0) setMealType(last.type);
-        if (last && typeof last.text === 'string') setMealText(last.text);
+        if (last && typeof last.text === 'string') {
+          setMealText(last.text);
+          setResultText(last.text);
+        }
         if (last && typeof last.savedPath === 'string') setSavedPath(last.savedPath);
         if (typeof data.savedPath === 'string' && data.savedPath) setSavedPath(data.savedPath);
         const nextResult = (last && last.result && typeof last.result === 'object' ? last.result : null)
@@ -606,24 +686,17 @@ function NutritionPanel() {
     };
   }, [reloadKey]);
 
-  /* 结果变化后画三张卡片；字体加载完再补画一次 */
+  /* 结果变化后画四页卡片；字体加载完再补画一次 */
   React.useEffect(function () {
-    if (!result) return undefined;
+    if (!hasDeck) return undefined;
     let cancelled = false;
     const draw = function () {
       if (cancelled) return;
-      // 档案还没单独保存过时，用当前表单值兜底，保证卡片页脚能拿到自媒体账号。
+      // 档案还没单独保存过时，用当前表单值兜底，保证卡片账号/身份行有内容。
       const profileForCard = Object.keys(savedProfile || {}).length > 0
         ? savedProfile
         : panelNormalizeProfile(profile);
-      const data = {
-        result: result,
-        profile: profileForCard,
-        mealType: result.mealType || mealType,
-        dateText: panelDateText(),
-        indexText: count > 0 ? '第 ' + count + ' 餐' : '',
-        handle: panelHandle(profileForCard),
-      };
+      const data = panelCardData(result, profileForCard, mealType, cardMealText, photo && photo.img);
       for (let i = 0; i < canvasRefs.length; i += 1) {
         const canvas = canvasRefs[i].current;
         if (!canvas) continue;
@@ -632,7 +705,7 @@ function NutritionPanel() {
         try {
           if (typeof cardDraw === 'function') cardDraw(panelCardMeta[i].kind, data, canvas);
         } catch (err) {
-          /* 单张卡片画失败不影响其余两张 */
+          /* 单张卡片画失败不影响其余几页 */
         }
       }
     };
@@ -645,7 +718,7 @@ function NutritionPanel() {
     return function () {
       cancelled = true;
     };
-  }, [result, savedProfile, profile, mealType, count, canvasRefs]);
+  }, [result, hasDeck, savedProfile, profile, mealType, cardMealText, photo, canvasRefs]);
 
   /* 生成后滚动到结果区（只在“刚生成”时触发，挂载回填不滚动） */
   React.useEffect(function () {
@@ -664,6 +737,7 @@ function NutritionPanel() {
   React.useEffect(function () {
     return function () {
       if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+      if (photoRef.current) URL.revokeObjectURL(photoRef.current.url);
     };
   }, []);
 
@@ -692,6 +766,69 @@ function NutritionPanel() {
     setMealText(function (prev) {
       return panelRetargetText(prev, nextType);
     });
+  };
+
+  /* ---------- 本餐照片（仅浏览器本地，不上传） ---------- */
+  const revokePhoto = function () {
+    if (photoRef.current && photoRef.current.url) URL.revokeObjectURL(photoRef.current.url);
+    photoRef.current = null;
+  };
+
+  const onPickPhotoFile = async function (file) {
+    if (!file) return;
+    if (!/^image\//.test(String(file.type || ''))) {
+      setPhotoError('请选择图片文件（JPG / PNG）');
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.src = url;
+    try {
+      await image.decode();
+    } catch (err) {
+      URL.revokeObjectURL(url);
+      setPhotoError('这张图片读不出来，换一张试试');
+      return;
+    }
+    if (!image.naturalWidth) {
+      URL.revokeObjectURL(url);
+      setPhotoError('这张图片读不出来，换一张试试');
+      return;
+    }
+    revokePhoto();
+    const next = { url: url, img: image, name: file.name || '本餐照片' };
+    photoRef.current = next;
+    setPhoto(next);
+    setPhotoError('');
+  };
+
+  const onPhotoFileChange = function (event) {
+    const input = event.target;
+    const file = input && input.files ? input.files[0] : null;
+    if (input) input.value = '';
+    if (file) onPickPhotoFile(file);
+  };
+
+  const onRemovePhoto = function () {
+    revokePhoto();
+    setPhoto(null);
+    setPhotoError('');
+  };
+
+  const onPastePhoto = function (event) {
+    const clipboard = event.clipboardData;
+    if (!clipboard || !clipboard.items) return;
+    for (let i = 0; i < clipboard.items.length; i += 1) {
+      const item = clipboard.items[i];
+      if (item.kind === 'file' && /^image\//.test(String(item.type || ''))) {
+        const file = item.getAsFile();
+        if (file) {
+          event.preventDefault();
+          onPickPhotoFile(file);
+          return;
+        }
+      }
+    }
   };
 
   const onSaveProfile = async function () {
@@ -767,12 +904,29 @@ function NutritionPanel() {
     setSaveError('');
     setSavedPath('');
     try {
+      // 照片只在浏览器本地解码；失败就回退成无照片版式，不影响生成。
+      if (photo && photo.url) {
+        const decoded = await panelDecodePhoto(photo);
+        if (!decoded) {
+          setPhotoError('照片读取失败，这次按无照片生成');
+          if (photoRef.current) URL.revokeObjectURL(photoRef.current.url);
+          photoRef.current = null;
+          setPhoto(null);
+        } else if (!photo.img || photo.img !== decoded) {
+          const nextPhoto = Object.assign({}, photo, { img: decoded });
+          photoRef.current = nextPhoto;
+          setPhoto(nextPhoto);
+        }
+      } else {
+        setPhotoError('');
+      }
       const data = await panelRequest('analyze', { type: mealType, text: text, profile: panelNormalizeProfile(profile) });
       const nextResult = data.result && typeof data.result === 'object' ? data.result : null;
       if (!nextResult) throw new Error('没有拿到分析结果，请重试');
       pendingScrollRef.current = true;
       setResult(nextResult);
-      // Host 在 analyze 时会把当前档案落库，这里同步一份，卡片页脚立刻有 @账号。
+      setResultText(text);
+      // Host 在 analyze 时会把当前档案落库，这里同步一份，卡片账号/身份行立刻更新。
       setSavedProfile(panelNormalizeProfile(profile));
       setNotice(typeof data.notice === 'string' ? data.notice : '');
       setFallback(data.fallback === true);
@@ -799,7 +953,7 @@ function NutritionPanel() {
   };
 
   const onDownloadAll = async function () {
-    if (!result || downloading) return;
+    if (!hasDeck || downloading) return;
     setDownloading(true);
     setSaveError('');
     try {
@@ -815,7 +969,7 @@ function NutritionPanel() {
   };
 
   const onSaveFiles = async function () {
-    if (!result || saveBusy) return;
+    if (!hasDeck || saveBusy) return;
     setSaveBusy(true);
     setSaveError('');
     try {
@@ -829,7 +983,7 @@ function NutritionPanel() {
           png: canvas.toDataURL('image/png'),
         });
       }
-      const texts = post && post.text ? [{ name: '04-图文文案.md', content: post.text }] : [];
+      const texts = post && post.text ? [{ name: '05-图文文案.md', content: post.text }] : [];
       const data = await panelRequest('save', { files: files, texts: texts });
       setSavedPath(typeof data.path === 'string' ? data.path : '');
     } catch (err) {
@@ -1109,6 +1263,43 @@ function NutritionPanel() {
             }, example.text);
           })
         ),
+        h('div', { className: 'nu-photo' },
+          photo ? h('img', { className: 'nu-photo-thumb', src: photo.url, alt: '本餐照片缩略图' }) : null,
+          h('div', { className: 'nu-photo-main' },
+            h('div', { className: 'nu-photo-title' }, '本餐照片（可选）'),
+            photo
+              ? h('div', { key: 'name', className: 'nu-photo-name' }, photo.name || '本餐照片')
+              : null,
+            h('div', { className: 'nu-photo-hint' }, photo
+              ? '只在这台电脑上使用，不会上传'
+              : '点选照片，或直接把照片粘贴到页面里；没有照片也能生成')
+          ),
+          h('div', { className: 'nu-photo-actions' },
+            h('input', {
+              className: 'nu-file',
+              ref: fileInputRef,
+              type: 'file',
+              accept: 'image/*',
+              'aria-label': '选择本餐照片文件',
+              onChange: onPhotoFileChange,
+            }),
+            h('button', {
+              type: 'button',
+              className: 'nu-btn nu-btn-sm',
+              'aria-label': photo ? '换一张照片' : '选择本餐照片',
+              onClick: function () {
+                if (fileInputRef.current) fileInputRef.current.click();
+              },
+            }, photo ? '换一张' : '选择照片'),
+            photo ? h('button', {
+              type: 'button',
+              className: 'nu-btn nu-btn-sm',
+              'aria-label': '移除照片',
+              onClick: onRemovePhoto,
+            }, '移除') : null
+          )
+        ),
+        photoError ? h('div', { className: 'nu-photo-error', role: 'status' }, photoError) : null,
         (analyzeError ? h('div', {
           className: 'nu-banner nu-banner-error nu-banner-form',
           role: 'alert',
@@ -1167,7 +1358,7 @@ function NutritionPanel() {
             className: 'nu-btn nu-btn-sm nu-btn-ghost nu-card-btn',
             'aria-label': meta.label,
             onClick: function () { onDownloadOne(index); },
-          }, '下载 PNG')
+          }, meta.label)
         ),
         h('div', { className: 'nu-canvas-wrap' },
           h('canvas', {
@@ -1188,12 +1379,27 @@ function NutritionPanel() {
     return h('div', { className: 'nu-empty' },
       h('div', { className: 'nu-empty-icon' }, h(PanelIcon, { size: 26 })),
       h('div', { className: 'nu-empty-title' }, count > 0 ? '已经记录 ' + count + ' 餐，再记一餐？' : '还没有生成图文'),
-      h('p', { className: 'nu-empty-desc' }, '填好个人档案，写下这一餐吃了什么，点「生成营养图文」，就会得到营养分析、改进建议、引导投稿三张 3:4 图文，外加一段可直接发布的图文文案。'),
+      h('p', { className: 'nu-empty-desc' }, '填好个人档案，写下这一餐吃了什么，点「生成营养图文」，就会得到封面、盘子、体检、改一处四张 3:4 图文，外加一段可直接发布的图文文案。'),
       h('div', { className: 'nu-empty-steps' },
         h('span', { className: 'nu-empty-step' }, h('i', null, '01'), '填档案'),
         h('span', { className: 'nu-empty-step' }, h('i', null, '02'), '记一餐'),
-        h('span', { className: 'nu-empty-step' }, h('i', null, '03'), '出三张图')
+        h('span', { className: 'nu-empty-step' }, h('i', null, '03'), '出四张图')
       )
+    );
+  };
+
+  /* 旧版结果（v1，只有三张卡片、没有 cover）：提示重新生成，不画卡片也不崩 */
+  const renderLegacy = function () {
+    return h('div', { className: 'nu-legacy', role: 'status' },
+      h('p', { className: 'nu-legacy-title' }, '这版图文是旧格式'),
+      h('p', { className: 'nu-legacy-desc' }, '重新生成一次即可看到新版四页图文（封面 / 盘子 / 体检 / 改一处）。'),
+      h('button', {
+        type: 'button',
+        className: 'nu-btn nu-btn-sm',
+        'aria-label': '重新生成图文',
+        disabled: !canGenerate,
+        onClick: onGenerate,
+      }, analyzing ? '生成中…' : '重新生成')
     );
   };
 
@@ -1217,7 +1423,7 @@ function NutritionPanel() {
       h('div', { className: 'nu-post-head' },
         h('span', { className: 'nu-post-badge' }, '文案'),
         h('span', { className: 'nu-post-title' }, '图文文案'),
-        h('span', { className: 'nu-post-hint' }, '标题 + 正文 + 备注 + 标签，可直接发布'),
+        h('span', { className: 'nu-post-hint' }, post.remark ? '标题 + 正文 + 备注 + 标签，可直接发布' : '标题 + 正文 + 标签，可直接发布'),
         h('div', { className: 'nu-post-actions' },
           h('button', {
             type: 'button',
@@ -1244,10 +1450,10 @@ function NutritionPanel() {
             return h('p', { key: index, className: 'nu-post-line' }, line);
           }))
         ),
-        h('div', { className: 'nu-post-row' },
+        post.remark ? h('div', { className: 'nu-post-row' },
           h('span', { className: 'nu-post-label' }, '备注'),
           h('p', { className: 'nu-post-text nu-post-muted', 'data-part': 'remark' }, post.remark)
-        ),
+        ) : null,
         h('div', { className: 'nu-post-row' },
           h('span', { className: 'nu-post-label' }, '标签'),
           h('p', { className: 'nu-post-text nu-post-tags', 'data-part': 'tags' }, post.tags.join(' '))
@@ -1349,7 +1555,9 @@ function NutritionPanel() {
         h('span', { className: 'nu-step' }, '05'),
         h('div', { className: 'nu-section-heading' },
           h('div', { className: 'nu-section-title' }, '图文文案'),
-          h('div', { className: 'nu-section-sub' }, '标题 + 正文（一句一行）+ 备注 + 标签，可直接发视频号')
+          h('div', { className: 'nu-section-sub' }, post && post.remark
+            ? '标题 + 正文（一句一行）+ 备注 + 标签，可直接发视频号'
+            : '标题 + 正文（一句一行）+ 标签，可直接发视频号')
         )
       ),
       h('div', { className: 'nu-section-body' }, renderPost())
@@ -1362,14 +1570,16 @@ function NutritionPanel() {
         h('span', { className: 'nu-step' }, '03'),
         h('div', { className: 'nu-section-heading' },
           h('div', { className: 'nu-section-title' }, '本餐图文'),
-          h('div', { className: 'nu-section-sub' }, result ? '三张 3:4 图文，可直接发视频号' : '生成后会显示在这里')
+          h('div', { className: 'nu-section-sub' }, hasDeck
+            ? '四张 3:4 图文，可直接发视频号'
+            : result ? '旧版结果，重新生成即可看到四页图文' : '生成后会显示在这里')
         ),
         h('div', { className: 'nu-section-tools' },
           h('button', {
             type: 'button',
             className: 'nu-btn nu-btn-sm',
             'aria-label': '保存到电脑',
-            disabled: !result || saveBusy,
+            disabled: !hasDeck || saveBusy,
             title: exportDir ? '保存到 ' + exportDir : '保存到默认目录',
             onClick: onSaveFiles,
           },
@@ -1380,7 +1590,7 @@ function NutritionPanel() {
             type: 'button',
             className: 'nu-btn nu-btn-sm',
             'aria-label': '下载全部',
-            disabled: !result || downloading,
+            disabled: !hasDeck || downloading,
             onClick: onDownloadAll,
           }, downloading ? '下载中…' : '下载全部')
         )
@@ -1393,7 +1603,9 @@ function NutritionPanel() {
         ) : null,
         analyzing && !result
           ? renderWorking()
-          : (result ? h('div', null, renderCards(), renderSavedPath()) : renderEmpty())
+          : (result
+              ? (hasDeck ? h('div', null, renderCards(), renderSavedPath()) : renderLegacy())
+              : renderEmpty())
       )
     );
   };
@@ -1411,7 +1623,7 @@ function NutritionPanel() {
     );
   }
 
-  return h('div', { className: 'nu-page' },
+  return h('div', { className: 'nu-page', onPaste: onPastePhoto },
     h('style', null, panelCss),
     renderTopbar(),
     h('div', { className: 'nu-inner' },

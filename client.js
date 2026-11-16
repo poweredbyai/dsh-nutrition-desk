@@ -5,71 +5,60 @@ window.__ModuleLoader__.load({
     const h = React.createElement
 // ---- src/card.js ----
 /* ============================================================
- * AI说餐谱 · Canvas 卡片渲染器（纯函数，无依赖，无副作用）
- * 逻辑尺寸 1080 x 1440，由调用方创建 canvas 并设置宽高。
- * 内部所有顶层名字均以 card 前缀，避免与其他文件的作用域冲突。
+ * 三餐营养师 v2 · 四页图文渲染器（P1 封面 / P2 盘子 / P3 体检 / P4 改一处）
+ * 纯 Canvas 2D，同步绘制，无第三方依赖、无 DOM 副作用。
+ * 尺寸与配色 1:1 移植自模板 敏哥三餐/template.html（1080×1440，左右 72 边距）。
+ * 所有顶层名字以 card 前缀，避免与其他文件的作用域冲突。
  * ============================================================ */
 
 var cardW = 1080
 var cardH = 1440
-var cardPad = 108
+var cardPad = 72
 var cardRight = cardW - cardPad
-var cardInner = cardRight - cardPad
+var cardInnerW = cardRight - cardPad
 
-/* 账号水印：优先渲染 data.handle（形如「@我的厨房」）；
-   为空或不以 @ 开头时回退到固定账号。 */
-var cardAccountFallback = '@AI说餐谱'
-var cardClaySoft = '#F6E4D9'
-var cardDisclaimer = '营养数据为 AI 估算，仅供参考'
+var cardBg = '#FCF8F1'
+var cardInk = '#1B1714'
+var cardInk2 = '#4A423B'
+var cardMuted = '#8C7B68'
+var cardRed = '#C8342A'
+var cardGreen = '#236848'
+var cardAmber = '#A9761B'
+var cardLine = 'rgba(27,23,20,0.10)'
+var cardLine2 = 'rgba(27,23,20,0.07)'
+var cardWhite = '#FFFFFF'
+var cardPhotoBg = '#E8E2D6'
+var cardPlaceholder = '#F3EDE2'
+var cardPieVeg = '#5F8A57'
+var cardPieCarb = '#D9C08A'
+var cardPieProtein = '#C4694A'
+var cardInsightBg = 'rgba(35,104,72,0.065)'
+var cardAskBg = 'rgba(35,104,72,0.075)'
 
-var cardPaper = '#F7F4EC'
-var cardInk = '#1B1A17'
-var cardInk2 = '#6B6459'
-var cardRule = '#DCD4C3'
-var cardGreen = '#2E6B4F'
-var cardGreenSoft = '#E6EFE3'
-var cardClay = '#C05F32'
-var cardYellow = '#F0D66B'
-var cardDeep = '#1E4335'
-var cardCream = '#F3EDDF'
-var cardAmber = '#BE8626'
-var cardTrack = '#E5DECC'
-
-var cardSans = '"Source Han Sans CN", "Source Han Sans SC", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif'
-var cardNumSans = '"Bahnschrift", "DIN Alternate", "Source Han Sans CN", "Microsoft YaHei", sans-serif'
+var cardFamily = '"Source Han Sans CN","思源黑体 CN","Microsoft YaHei",sans-serif'
+var cardAscRatio = 0.875 // 字号 → 基线在行盒中的偏移比例
 
 /* ---------------- 基础工具 ---------------- */
 
 function cardF(size, weight) {
-  return (weight || 400) + ' ' + size + 'px ' + cardSans
+  return (weight || 400) + ' ' + size + 'px ' + cardFamily
 }
 
-function cardNumF(size, weight) {
-  return (weight || 700) + ' ' + size + 'px ' + cardNumSans
-}
-
-function cardUse(ctx, size, weight, color) {
+function cardSetFont(ctx, size, weight) {
   ctx.font = cardF(size, weight)
-  if (color) ctx.fillStyle = color
 }
 
-function cardNum(ctx, size, weight, color) {
-  ctx.font = cardNumF(size, weight)
-  if (color) ctx.fillStyle = color
-}
-
-function cardStr(v, fallback) {
-  if (v === null || v === undefined) return fallback === undefined ? '' : fallback
-  return String(v)
-}
-
-function cardInt(v, fallback) {
-  var n = Number(v)
-  return isFinite(n) ? Math.round(n) : fallback
+function cardBase(top, size, lh) {
+  var lineH = lh || size * 1.5
+  return top + (lineH - size) / 2 + cardAscRatio * size
 }
 
 function cardClamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v))
+}
+
+function cardStr(v) {
+  return v === null || v === undefined ? '' : String(v)
 }
 
 function cardRoundRect(ctx, x, y, w, h, r) {
@@ -87,917 +76,838 @@ function cardRoundRect(ctx, x, y, w, h, r) {
   ctx.closePath()
 }
 
-/* 带字距的小标签；align: left | right */
-function cardSpaced(ctx, text, x, y, tracking, color, align) {
+function cardMeasure(ctx, text, ls) {
   var str = cardStr(text)
-  var chars = str.split('')
-  var widths = []
-  var total = 0
-  var i
-  for (i = 0; i < chars.length; i++) {
-    var cw = ctx.measureText(chars[i]).width
-    widths.push(cw)
-    total += cw
+  if (!str) return 0
+  if (!ls) return ctx.measureText(str).width
+  var w = 0
+  for (var i = 0; i < str.length; i++) w += ctx.measureText(str.charAt(i)).width
+  return w + ls * (str.length - 1)
+}
+
+/* 绘制单串，返回「含末尾字距」的推进宽度；ls 为 0 时走原生 fillText */
+function cardDrawStr(ctx, text, x, base, size, weight, color, ls, align) {
+  var str = cardStr(text)
+  if (!str) return 0
+  cardSetFont(ctx, size, weight)
+  ctx.fillStyle = color || cardInk
+  var vis = cardMeasure(ctx, str, ls || 0)
+  var adv = ls ? vis + ls : vis
+  var startX = x
+  if (align === 'center') startX = x - vis / 2
+  else if (align === 'right') startX = x - vis
+  if (!ls) {
+    ctx.fillText(str, startX, base)
+    return adv
   }
-  if (chars.length > 1) total += tracking * (chars.length - 1)
-  var cx = align === 'right' ? x - total : align === 'center' ? x - total / 2 : x
-  ctx.save()
-  ctx.textAlign = 'left'
-  if (color) ctx.fillStyle = color
-  for (i = 0; i < chars.length; i++) {
-    ctx.fillText(chars[i], cx, y)
-    cx += widths[i] + tracking
+  var cx = startX
+  for (var i = 0; i < str.length; i++) {
+    ctx.fillText(str.charAt(i), cx, base)
+    cx += ctx.measureText(str.charAt(i)).width + ls
   }
-  ctx.restore()
-  return total
+  return adv
 }
 
-function cardDot(ctx, cx, cy, r, color) {
-  ctx.save()
-  ctx.fillStyle = color
-  ctx.beginPath()
-  ctx.arc(cx, cy, r, 0, Math.PI * 2)
-  ctx.fill()
-  ctx.restore()
-}
-
-function cardHr(ctx, y, x1, x2, color, w) {
-  ctx.save()
-  ctx.fillStyle = color || cardRule
-  ctx.fillRect(x1, y, (x2 - x1), w || 1.5)
-  ctx.restore()
-}
-
-/* ---------------- 文本切分与折行 ---------------- */
-
-var cardClosePunct = '，。、；：？！）】》」』…·%”’'
-var cardOpenPunct = '（【《「『“‘'
-var cardGlueBack = '+＋/&'
+/* ---------------- 富文本：分段 / 折行 / 绘制 ---------------- */
 
 function cardIsWordChar(c) {
-  return /[A-Za-z0-9@#&'._+\-/=]/.test(c)
+  return /[A-Za-z0-9@#%&'._+\-/=]/.test(c)
 }
 
-/* 把文本切成排版单元：中文按字，英文/数字按词，标点并入相邻单元 */
-function cardTokens(text) {
-  var str = cardStr(text)
-  var raw = []
+function cardUnits(text, o) {
+  var s = cardStr(text)
+  var em = cardStr(o.emphasis)
+  var e0 = -1
+  var e1 = -1
+  if (em) {
+    var idx = s.indexOf(em)
+    if (idx >= 0) {
+      e0 = idx
+      e1 = idx + em.length
+    }
+  }
+  var baseColor = o.color || cardInk
+  var baseWeight = o.weight || 400
+  var units = []
   var i = 0
-  while (i < str.length) {
-    var c = str.charAt(i)
-    if (c === ' ') {
-      raw.push(' ')
-      i++
-      continue
-    }
-    if (cardIsWordChar(c)) {
-      var j = i
-      while (j < str.length && cardIsWordChar(str.charAt(j))) j++
-      raw.push(str.slice(i, j))
-      i = j
-      continue
-    }
-    raw.push(c)
-    i++
+  function push(a, b) {
+    if (b <= a) return
+    var emph = e0 >= 0 && a >= e0 && a < e1
+    units.push({
+      t: s.slice(a, b),
+      c: emph ? (o.emphColor || cardRed) : baseColor,
+      w: emph ? (o.emphWeight || baseWeight) : baseWeight,
+      s: o.size
+    })
   }
-  /* 收尾标点、独立连接符粘到前一个单元，避免行首出现逗号或「+」 */
-  var merged = []
-  for (i = 0; i < raw.length; i++) {
-    var t = raw[i]
-    if (cardClosePunct.indexOf(t) >= 0 && merged.length) {
-      merged[merged.length - 1] += t
-      continue
+  while (i < s.length) {
+    var j = i + 1
+    if (cardIsWordChar(s.charAt(i))) {
+      while (j < s.length && cardIsWordChar(s.charAt(j))) j++
+    } else if (s.charAt(i) === ' ') {
+      while (j < s.length && s.charAt(j) === ' ') j++
     }
-    if (t === ' ' && merged.length) {
-      merged[merged.length - 1] += t
-      continue
-    }
-    if (t.length === 1 && cardGlueBack.indexOf(t) >= 0 && merged.length) {
-      merged[merged.length - 1] += t
-      continue
-    }
-    merged.push(t)
+    var cuts = [i]
+    if (e0 > i && e0 < j) cuts.push(e0)
+    if (e1 > i && e1 < j) cuts.push(e1)
+    cuts.push(j)
+    cuts.sort(function (a, b) { return a - b })
+    for (var k = 0; k < cuts.length - 1; k++) push(cuts[k], cuts[k + 1])
+    i = j
   }
-  /* 起首标点粘到后一个单元 */
-  var out = []
-  for (i = 0; i < merged.length; i++) {
-    if (cardOpenPunct.indexOf(merged[i]) >= 0 && i + 1 < merged.length) {
-      merged[i + 1] = merged[i] + merged[i + 1]
-      continue
-    }
-    out.push(merged[i])
-  }
-  return out
+  return units
 }
 
-function cardEllipsize(ctx, text, maxW) {
-  var str = cardStr(text)
-  if (ctx.measureText(str).width <= maxW) return str
-  var chars = str.split('')
-  var lo = 0
-  var hi = chars.length
-  while (lo < hi) {
-    var mid = Math.ceil((lo + hi) / 2)
-    if (ctx.measureText(chars.slice(0, mid).join('') + '…').width <= maxW) lo = mid
-    else hi = mid - 1
-  }
-  return chars.slice(0, Math.max(0, lo)).join('') + '…'
+function cardUnitWidth(ctx, u, ls) {
+  cardSetFont(ctx, u.s, u.w)
+  return cardMeasure(ctx, u.t, ls)
 }
 
-/* 贪心折行：返回行数组，超过 maxLines 时末行加省略号 */
-function cardWrap(ctx, text, maxW, maxLines) {
-  var tokens = cardTokens(text)
+function cardLineWidth(ctx, line, ls) {
+  var w = 0
+  for (var i = 0; i < line.length; i++) w += cardUnitWidth(ctx, line[i], ls)
+  return w
+}
+
+function cardWrapUnits(ctx, units, maxW, maxLines, ls) {
   var lines = []
-  var cur = ''
+  var cur = []
+  var curW = 0
   var i
-  for (i = 0; i < tokens.length; i++) {
-    var t = tokens[i]
-    var test = cur + t
-    if (cur !== '' && ctx.measureText(test).width > maxW) {
+  for (i = 0; i < units.length; i++) {
+    var u = units[i]
+    var uw = cardUnitWidth(ctx, u, ls)
+    if (cur.length && curW + uw > maxW + 0.01) {
       lines.push(cur)
-      cur = t.replace(/^ +/, '')
-    } else {
-      cur = test
+      cur = []
+      curW = 0
+      if (u.t === ' ') continue
     }
+    cur.push(u)
+    curW += uw
   }
-  if (cur !== '') lines.push(cur)
-  if (!lines.length) lines = ['']
+  if (cur.length) lines.push(cur)
+  if (!lines.length) lines.push([])
   if (lines.length > maxLines) {
-    var tail = lines.slice(maxLines).join('')
     var kept = lines.slice(0, maxLines)
-    kept[maxLines - 1] = cardEllipsize(ctx, kept[maxLines - 1] + tail, maxW)
+    var last = kept[maxLines - 1].slice()
+    while (last.length && cardLineWidth(ctx, last, ls) > maxW - 24) last.pop()
+    while (last.length && last[last.length - 1].t === ' ') last.pop()
+    var tail = last.length ? last[last.length - 1] : { c: cardInk, w: 400, s: 24 }
+    last.push({ t: '…', c: tail.c, w: tail.w, s: tail.s })
+    kept[maxLines - 1] = last
     lines = kept
   }
   return lines
 }
 
-/* 均衡折行：在「最少行数」的前提下让各行长度接近，视觉更稳 */
-function cardWrapBal(ctx, text, maxW, maxLines) {
-  var str = cardStr(text)
-  var tokens = cardTokens(str)
-  if (tokens.length < 2) return [str]
-  var i, j, k
-  var widths = []
-  var weights = []
-  var charUnit = ctx.measureText('中').width || 1
-  for (i = 0; i < tokens.length; i++) {
-    var tw = ctx.measureText(tokens[i]).width
-    widths.push(tw)
-    var isWord = tokens[i].length > 1 && cardIsWordChar(tokens[i].charAt(0))
-    weights.push(isWord ? Math.max(1, Math.round(tw / (charUnit * 0.56))) : 1)
-  }
-  /* 贪心求最少行数 */
-  var nmin = 1
-  var acc = 0
-  for (i = 0; i < tokens.length; i++) {
-    if (acc > 0 && acc + widths[i] > maxW) {
-      nmin++
-      acc = widths[i]
+function cardDrawUnits(ctx, line, x, base, align, ls) {
+  var total = cardLineWidth(ctx, line, ls)
+  var cx = x
+  if (align === 'center') cx = x - total / 2
+  else if (align === 'right') cx = x - total
+  for (var i = 0; i < line.length; i++) {
+    var u = line[i]
+    cardSetFont(ctx, u.s, u.w)
+    ctx.fillStyle = u.c
+    if (!ls) {
+      ctx.fillText(u.t, cx, base)
+      cx += ctx.measureText(u.t).width
     } else {
-      acc += widths[i]
-    }
-  }
-  if (nmin > maxLines) {
-    return cardWrap(ctx, str, maxW, maxLines)
-  }
-  var totalW = 0
-  var totalV = 0
-  for (i = 0; i < tokens.length; i++) {
-    totalW += widths[i]
-    totalV += weights[i]
-  }
-  var target = totalV / nmin
-  var n = tokens.length
-  var INF = 1e15
-  /* dp[k][i]：前 i 个单元排 k 行，最小平方偏差 */
-  var dp = []
-  var from = []
-  for (k = 0; k <= nmin; k++) {
-    dp.push([])
-    from.push([])
-    for (i = 0; i <= n; i++) {
-      dp[k].push(INF)
-      from[k].push(-1)
-    }
-  }
-  dp[0][0] = 0
-  for (k = 1; k <= nmin; k++) {
-    for (i = 1; i <= n; i++) {
-      var lw = 0
-      var lv = 0
-      for (j = i - 1; j >= 0; j--) {
-        lw += widths[j]
-        lv += weights[j]
-        if (lw > maxW + 0.5) break
-        if (dp[k - 1][j] >= INF) continue
-        var cost = dp[k - 1][j] + (lv - target) * (lv - target)
-        if (cost < dp[k][i]) {
-          dp[k][i] = cost
-          from[k][i] = j
-        }
+      for (var k = 0; k < u.t.length; k++) {
+        ctx.fillText(u.t.charAt(k), cx, base)
+        cx += ctx.measureText(u.t.charAt(k)).width + ls
       }
     }
   }
-  var lines = []
-  var pos = n
-  for (k = nmin; k >= 1; k--) {
-    var start = from[k][pos]
-    if (start < 0) return cardWrap(ctx, str, maxW, maxLines)
-    lines.unshift(tokens.slice(start, pos).join(''))
-    pos = start
+  return total
+}
+
+function cardPara(ctx, o) {
+  var size = o.size
+  var ls = o.ls || 0
+  var lh = o.lh || size * 1.5
+  var units = cardUnits(o.text, o)
+  var lines = cardWrapUnits(ctx, units, o.maxW, o.maxLines || 1, ls)
+  return { lines: lines, height: lines.length * lh, lh: lh, size: size, ls: ls }
+}
+
+function cardDrawPara(ctx, lay, x, top, align) {
+  var base = cardBase(top, lay.size, lay.lh)
+  for (var i = 0; i < lay.lines.length; i++) {
+    cardDrawUnits(ctx, lay.lines[i], x, base + i * lay.lh, align, lay.ls)
   }
-  return lines
+  return lay.height
 }
 
-function cardLines(ctx, lines, x, y, lh, color, align) {
-  ctx.save()
-  ctx.fillStyle = color
-  ctx.textAlign = align || 'left'
-  for (var i = 0; i < lines.length; i++) ctx.fillText(lines[i], x, y + i * lh)
-  ctx.restore()
-}
-
-/* 折行时别把常用两字词拆开（蛋白 / 纤维 / 营养 …），否则大字标题会出现「蛋」换行 */
-var cardKeepPairs = [
-  '蛋白', '纤维', '脂肪', '碳水', '营养', '蔬菜', '水果', '热量', '主食', '鸡蛋', '玉米', '牛奶', '酸奶',
-  '米饭', '早餐', '午餐', '晚餐', '加餐', '豆制', '制品', '维生', '生素', '叶酸', '菌菇', '全麦', '杂粮',
-  '血糖', '饱腹', '水分', '能量', '结构', '建议', '记录', '缺口', '一拳', '掌心', '两拳', '一半', '左右',
-  '粗粮', '精面', '外卖', '食堂', '清淡', '油盐', '甜食', '零食', '饮料', '作息'
-]
-
-/* 三字以上的常用词：拆开更难看，单独处理 */
-var cardKeepLongWords = ['蛋白质', '饱腹感', '维生素', '矿物质', '膳食纤维', '碳水化合物']
-
-/* 把落在行尾的半个词挪到下一行（只在下一行放得下时挪） */
-function cardFixBreaks(ctx, lines, maxW) {
-  if (!Array.isArray(lines) || lines.length < 2) return lines
-  var out = lines.slice()
-  var i, w
-  for (i = 0; i < out.length - 1; i++) {
-    var a = cardStr(out[i])
-    var b = cardStr(out[i + 1])
-    if (!a || !b) continue
-    /* 先处理三字以上的词 */
-    var moved = false
-    for (w = 0; w < cardKeepLongWords.length; w++) {
-      var word = cardKeepLongWords[w]
-      var headLen = word.length - 1
-      if (a.length < headLen + 1) continue
-      if (a.slice(-headLen) !== word.slice(0, headLen)) continue
-      if (b.charAt(0) !== word.slice(-1)) continue
-      var headLong = a.slice(0, -headLen)
-      if (!headLong) continue
-      var nextLong = a.slice(-headLen) + b
-      if (ctx.measureText(nextLong).width > maxW + 0.5) continue
-      out[i] = headLong
-      out[i + 1] = nextLong
-      moved = true
-      break
-    }
-    if (moved) continue
-    var pair = a.slice(-1) + b.charAt(0)
-    if (cardKeepPairs.indexOf(pair) < 0) continue
-    var head = a.slice(0, -1)
-    if (!head) continue
-    var next = a.slice(-1) + b
-    if (ctx.measureText(next).width > maxW + 0.5) continue
-    out[i] = head
-    out[i + 1] = next
+function cardParaText(lay) {
+  var out = ''
+  for (var i = 0; i < lay.lines.length; i++) {
+    for (var k = 0; k < lay.lines[i].length; k++) out += lay.lines[i][k].t
   }
   return out
 }
 
-/* 行与行之间是否还残留断词 */
-function cardHasSplit(lines) {
-  if (!Array.isArray(lines) || lines.length < 2) return false
-  var i, w
-  for (i = 0; i < lines.length - 1; i++) {
-    var a = cardStr(lines[i])
-    var b = cardStr(lines[i + 1])
-    if (!a || !b) continue
-    for (w = 0; w < cardKeepLongWords.length; w++) {
-      var word = cardKeepLongWords[w]
-      var headLen = word.length - 1
-      if (a.length >= headLen && a.slice(-headLen) === word.slice(0, headLen) && b.charAt(0) === word.slice(-1)) return true
-    }
-    if (cardKeepPairs.indexOf(a.slice(-1) + b.charAt(0)) >= 0) return true
-  }
-  return false
+function cardTruncated(lay) {
+  return cardParaText(lay).indexOf('…') >= 0
 }
 
-/* 大字标题：优先保证「不拆常用词」，必要时把字号降一档；都不行才接受拆词 */
-function cardWrapNoSplit(ctx, text, maxW, maxLines, sizes, weight) {
+/* ---------------- 图片 ---------------- */
+
+function cardHasPhoto(data) {
+  var p = data && data.photo
+  return !!(p && (p.naturalWidth || p.width))
+}
+
+function cardCover(ctx, img, x, y, w, h, focusY, radius) {
+  var iw = img.naturalWidth || img.width || 0
+  var ih = img.naturalHeight || img.height || 0
+  if (!iw || !ih) return false
+  var scale = Math.max(w / iw, h / ih)
+  var sw = w / scale
+  var sh = h / scale
+  var sx = (iw - sw) / 2
+  var sy = cardClamp((ih - sh) * (focusY === undefined ? 0.5 : focusY), 0, Math.max(0, ih - sh))
+  ctx.save()
+  if (radius) {
+    cardRoundRect(ctx, x, y, w, h, radius)
+    ctx.clip()
+  }
+  ctx.fillStyle = cardPhotoBg
+  ctx.fillRect(x, y, w, h)
+  ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h)
+  ctx.restore()
+  return true
+}
+
+/* ---------------- 页头 / 页脚 ---------------- */
+
+function cardKicker(ctx, head, tail) {
+  var adv = cardDrawStr(ctx, head, cardPad, 102, 23, 700, cardGreen, 4.6, 'left')
+  cardDrawStr(ctx, ' · ' + cardStr(tail), cardPad + adv - 4.6, 102, 23, 400, cardMuted, 4.6, 'left')
+}
+
+/* ttl：从 sizes 里挑第一个能排进 maxW、≤2 行且不截断的字号 */
+function cardTtlLayout(ctx, text, sizes, maxW) {
+  var i
   var fallback = null
-  var i, k
   for (i = 0; i < sizes.length; i++) {
-    ctx.font = cardF(sizes[i], weight || 700)
-    var lines = cardWrapBal(ctx, text, maxW, maxLines)
-    var widest = 0
-    for (k = 0; k < lines.length; k++) {
-      widest = Math.max(widest, ctx.measureText(lines[k]).width)
-    }
-    if (!fallback) fallback = { size: sizes[i], lines: cardFixBreaks(ctx, lines, maxW) }
-    if (widest > maxW + 0.5) continue
-    var fixed = cardFixBreaks(ctx, lines, maxW)
-    if (!cardHasSplit(fixed)) return { size: sizes[i], lines: fixed }
+    var s = sizes[i]
+    var lay = cardPara(ctx, {
+      text: text, size: s, weight: 700, color: cardInk,
+      maxW: maxW, maxLines: 2, lh: s * 1.24, ls: -0.01 * s
+    })
+    if (!cardTruncated(lay)) return { lay: lay, size: s }
+    if (!fallback) fallback = { lay: lay, size: s }
   }
-  return fallback || { size: sizes[sizes.length - 1], lines: [cardStr(text)] }
+  return fallback || { lay: cardPara(ctx, { text: text, size: 50, weight: 700, color: cardInk, maxW: maxW, maxLines: 2, lh: 62, ls: -0.5 }), size: 50 }
 }
 
-/* 大字标题自适应：从 sizes 里挑第一个任何行都不越界的字号，下限由 sizes 末尾给出 */
-function cardFitBlock(ctx, text, maxW, maxLines, sizes, weight) {
-  var best = { size: sizes[sizes.length - 1], lines: [cardStr(text)] }
-  for (var i = 0; i < sizes.length; i++) {
-    ctx.font = cardF(sizes[i], weight || 700)
-    var lines = cardFixBreaks(ctx, cardWrapBal(ctx, text, maxW, maxLines), maxW)
-    var widest = 0
-    for (var k = 0; k < lines.length; k++) {
-      widest = Math.max(widest, ctx.measureText(lines[k]).width)
-    }
-    best = { size: sizes[i], lines: lines, widest: widest }
-    if (widest <= maxW + 0.5) break
-  }
-  if (best.widest > maxW + 0.5) {
-    ctx.font = cardF(best.size, weight || 700)
-    best.lines = best.lines.map(function (ln) { return cardEllipsize(ctx, ln, maxW) })
-  }
-  return best
+function cardTtlDraw(ctx, ttl, top) {
+  return top + cardDrawPara(ctx, ttl.lay, cardPad, top)
 }
 
-function cardArrow(ctx, x, cy, len, color, lw) {
+function cardPager(ctx, text) {
+  cardSetFont(ctx, 20, 400)
+  var tw = ctx.measureText(text).width
+  var pw = tw + 34
+  var py = 1356
   ctx.save()
-  ctx.strokeStyle = color
-  ctx.lineWidth = lw || 3.4
-  ctx.lineCap = 'round'
-  ctx.lineJoin = 'round'
-  ctx.beginPath()
-  ctx.moveTo(x, cy)
-  ctx.lineTo(x + len, cy)
-  ctx.stroke()
-  ctx.beginPath()
-  ctx.moveTo(x + len - 14, cy - 13)
-  ctx.lineTo(x + len, cy)
-  ctx.lineTo(x + len - 14, cy + 13)
+  ctx.strokeStyle = cardLine
+  ctx.lineWidth = 1
+  cardRoundRect(ctx, cardRight - pw, py, pw, 40, 999)
   ctx.stroke()
   ctx.restore()
+  cardDrawStr(ctx, text, cardRight - 17, 1383, 20, 400, cardInk2, 0, 'right')
 }
 
-/* ---------------- 底色 ---------------- */
-
-function cardPaintPaper(ctx) {
-  ctx.fillStyle = cardPaper
-  ctx.fillRect(0, 0, cardW, cardH)
-  var g = ctx.createLinearGradient(0, 0, 0, cardH)
-  g.addColorStop(0, 'rgba(255,252,243,0.65)')
-  g.addColorStop(0.45, 'rgba(247,244,236,0)')
-  g.addColorStop(1, 'rgba(231,223,205,0.38)')
-  ctx.fillStyle = g
-  ctx.fillRect(0, 0, cardW, cardH)
+function cardFoot(ctx, account) {
+  cardDrawStr(ctx, cardStr(account), cardPad, 1384, 22, 400, cardMuted, 0.44, 'left')
 }
 
-function cardPaintDeep(ctx) {
-  ctx.fillStyle = cardDeep
-  ctx.fillRect(0, 0, cardW, cardH)
-  var g = ctx.createLinearGradient(0, -120, cardW * 0.55, cardH)
-  g.addColorStop(0, 'rgba(58,110,86,0.42)')
-  g.addColorStop(0.55, 'rgba(30,67,53,0)')
-  g.addColorStop(1, 'rgba(10,32,24,0.42)')
-  ctx.fillStyle = g
-  ctx.fillRect(0, 0, cardW, cardH)
-}
-
-/* ---------------- 公共区块：页眉 / 页脚 ---------------- */
-
-function cardHeader(ctx, label, data, dark) {
-  var ink = dark ? cardCream : cardInk2
-  var accent = dark ? cardYellow : cardGreen
-  cardDot(ctx, cardPad + 5, 123, 5.5, accent)
-  cardUse(ctx, 26, 600, ink)
-  cardSpaced(ctx, label, cardPad + 26, 132, 2.4, ink)
-
-  var dateText = cardStr(data.dateText).trim()
-  if (dateText) {
-    cardUse(ctx, 23, 400, dark ? 'rgba(243,237,223,0.62)' : cardInk2)
-    ctx.textAlign = 'right'
-    ctx.fillText(cardEllipsize(ctx, dateText, 420), cardRight, 132)
-    ctx.textAlign = 'left'
-  }
-
-  cardHr(ctx, 174, cardPad, cardRight, dark ? 'rgba(243,237,223,0.2)' : cardRule, 1.5)
+/* 提示条：浅绿底 + 左侧绿边（P2 / P3 共用），返回高度 */
+function cardInsightBox(ctx, top, text, bold, emphColor) {
+  var padY = 28
+  var textX = cardPad + 4 + 32
+  var lay = cardPara(ctx, {
+    text: text, size: 31, weight: 400, color: cardInk2,
+    emphasis: bold, emphColor: emphColor || cardInk, emphWeight: 700,
+    maxW: cardRight - textX - 32, maxLines: 3, lh: 49.6
+  })
+  var h = padY * 2 + lay.height
   ctx.save()
-  ctx.fillStyle = accent
-  ctx.fillRect(cardPad, 172.5, 76, 3)
+  ctx.fillStyle = cardInsightBg
+  ctx.beginPath()
+  ctx.moveTo(cardPad + 18, top)
+  ctx.lineTo(cardRight, top)
+  ctx.arcTo(cardRight, top, cardRight, top + 18, 18)
+  ctx.lineTo(cardRight, top + h - 18)
+  ctx.arcTo(cardRight, top + h, cardRight - 18, top + h, 18)
+  ctx.lineTo(cardPad + 18, top + h)
+  ctx.arcTo(cardPad, top + h, cardPad, top + h - 18, 18)
+  ctx.lineTo(cardPad, top)
+  ctx.closePath()
+  ctx.fill()
   ctx.restore()
-}
-
-/* 账号水印取值：handle 合法（非空且以 @ 开头）时用 handle，否则回退 */
-function cardWatermark(handle) {
-  var h = cardStr(handle).trim()
-  if (!h || h.charAt(0) !== '@') return cardAccountFallback
+  ctx.fillStyle = cardGreen
+  ctx.fillRect(cardPad, top, 4, h)
+  cardDrawPara(ctx, lay, textX, top + padY)
   return h
 }
 
-/* 纸卡页脚：分隔线 + 右下账号水印 + 画布底部居中的免责行 */
-function cardFooter(ctx, data) {
-  cardHr(ctx, 1250, cardPad, cardRight, cardRule, 1.2)
+/* ---------------- P1 封面 ---------------- */
 
-  cardUse(ctx, 24, 600, cardInk)
-  ctx.textAlign = 'right'
-  ctx.fillText(cardEllipsize(ctx, cardWatermark(data.handle), 560), cardRight, 1296)
-  ctx.textAlign = 'left'
+function cardDrawP1(ctx, data) {
+  ctx.fillStyle = cardBg
+  ctx.fillRect(0, 0, cardW, cardH)
+  var cover = data.cover || {}
 
-  cardUse(ctx, 19, 400, 'rgba(107,100,89,0.8)')
-  ctx.textAlign = 'center'
-  ctx.fillText(cardDisclaimer, cardW / 2, 1344)
-  ctx.textAlign = 'left'
-}
-
-/* ---------------- analysis ---------------- */
-
-function cardScoreColor(score) {
-  if (score >= 75) return cardGreen
-  if (score >= 55) return cardAmber
-  return cardClay
-}
-
-function cardScoreRing(ctx, cx, cy, r, score) {
-  var color = cardScoreColor(score)
-  ctx.save()
-  ctx.lineWidth = 13
-  ctx.lineCap = 'round'
-  ctx.strokeStyle = cardTrack
-  ctx.beginPath()
-  ctx.arc(cx, cy, r, 0, Math.PI * 2)
-  ctx.stroke()
-  var pct = cardClamp(score, 0, 100)
-  if (pct > 0.5) {
-    ctx.strokeStyle = color
-    ctx.beginPath()
-    ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (pct / 100))
-    ctx.stroke()
+  if (cardHasPhoto(data)) {
+    cardCover(ctx, data.photo, 0, 0, cardW, 800, 0.5, 0)
+  } else {
+    ctx.fillStyle = cardPlaceholder
+    ctx.fillRect(0, 0, cardW, 800)
+    ctx.save()
+    ctx.strokeStyle = cardLine
+    ctx.lineWidth = 1
+    ctx.strokeRect(72.5, 72.5, 935, 655)
+    ctx.restore()
+    var mealText = cardStr(data.mealText).trim()
+    if (mealText) {
+      var lay0 = cardPara(ctx, {
+        text: mealText, size: 24, weight: 400, color: cardMuted,
+        maxW: 700, maxLines: 3, lh: 36
+      })
+      cardDrawPara(ctx, lay0, cardW / 2, 400 - lay0.height / 2, 'center')
+    }
   }
-  ctx.restore()
 
-  ctx.save()
-  ctx.textAlign = 'center'
-  cardNum(ctx, 78, 700, cardInk)
-  ctx.fillText(String(cardInt(score, 0)), cx, cy + 16)
-  cardUse(ctx, 22, 500, cardInk2)
-  ctx.fillText('分', cx, cy + 52)
-  ctx.restore()
-}
+  /* meta：场景 + 日期 + 绿色下划线 */
+  var scene = cardStr(data.mealType || '一餐')
+  var sceneAdv = cardDrawStr(ctx, scene, cardPad, 878, 24, 700, cardGreen, 0.96, 'left')
+  ctx.fillStyle = cardGreen
+  ctx.fillRect(cardPad, 888, sceneAdv - 0.96, 2)
+  cardDrawStr(ctx, cardStr(data.date), cardPad + sceneAdv + 14, 879, 24, 400, cardMuted, 0.96, 'left')
 
-function cardToneWord(tone) {
-  if (tone === 'good') return '达标'
-  if (tone === 'watch') return '偏低'
-  return '不足'
-}
-
-/* 「蛋白质 18g 达标 · 碳水 52g 偏低 · 脂肪 14g 不足 · 纤维 3g 不足」 */
-function cardMacroPhrase(macros) {
-  if (!Array.isArray(macros)) return ''
-  var parts = []
+  /* 标题 + 说明：在给定字号中挑能放下的 */
+  var lines = Array.isArray(cover.lines) ? cover.lines.slice(0, 3) : []
+  if (!lines.length) lines = ['']
+  var emphasis = cardStr(cover.emphasis)
+  var subTexts = Array.isArray(cover.sub) ? cover.sub.slice(0, 2) : []
+  var subLh = 30 * 1.62
+  var subLays = []
   var i
-  for (i = 0; i < macros.length && i < 4; i++) {
-    var m = macros[i] || {}
-    var name = cardStr(m.name).trim()
-    if (!name) continue
-    var value = cardStr(m.value).trim()
-    parts.push(name + (value ? ' ' + value : '') + ' ' + cardToneWord(m.tone))
+  for (i = 0; i < subTexts.length; i++) {
+    subLays.push(cardPara(ctx, {
+      text: subTexts[i], size: 30, weight: 400, color: cardInk2,
+      maxW: cardInnerW, maxLines: 1, lh: subLh
+    }))
+  }
+  var subH = 0
+  for (i = 0; i < subLays.length; i++) subH += subLays[i].height
+
+  var h1Top = 914
+  var bottomLimit = 1339
+  var sizes = [82, 75, 68]
+  var picked = null
+  var si
+  for (si = 0; si < sizes.length; si++) {
+    var sz = sizes[si]
+    var lh = sz * 1.18
+    var parts = []
+    var total = 0
+    var ok = true
+    for (i = 0; i < lines.length; i++) {
+      var p = cardPara(ctx, {
+        text: lines[i], size: sz, weight: 700, color: cardInk,
+        emphasis: emphasis, emphColor: cardRed, emphWeight: 700,
+        maxW: cardInnerW, maxLines: 2, lh: lh, ls: -0.01 * sz
+      })
+      if (cardTruncated(p)) ok = false
+      parts.push(p)
+      total += p.lines.length
+    }
+    if (ok && total <= 3 && h1Top + total * lh + 22 + subH <= bottomLimit) {
+      picked = { size: sz, lh: lh, parts: parts }
+      break
+    }
+  }
+  if (!picked) {
+    var fsz = 68
+    var flh = fsz * 1.18
+    var fparts = []
+    for (i = 0; i < lines.length; i++) {
+      fparts.push(cardPara(ctx, {
+        text: lines[i], size: fsz, weight: 700, color: cardInk,
+        emphasis: emphasis, emphColor: cardRed, emphWeight: 700,
+        maxW: cardInnerW, maxLines: 1, lh: flh, ls: -0.01 * fsz
+      }))
+    }
+    picked = { size: fsz, lh: flh, parts: fparts }
+  }
+
+  var y = h1Top
+  for (i = 0; i < picked.parts.length; i++) y += cardDrawPara(ctx, picked.parts[i], cardPad, y)
+  y += 22
+  for (i = 0; i < subLays.length; i++) {
+    if (y + subLays[i].height <= bottomLimit || i === 0) y += cardDrawPara(ctx, subLays[i], cardPad, y)
+  }
+
+  cardDrawStr(ctx, cardStr(data.profileLine), cardPad, 1388, 22, 400, cardMuted, 0.88, 'left')
+  cardDrawStr(ctx, cardStr(data.account), cardRight, 1388, 22, 700, cardInk2, 0, 'right')
+}
+
+/* ---------------- P2 盘子 ---------------- */
+
+function cardToneColor(tone) {
+  if (tone === 'veg') return cardPieVeg
+  if (tone === 'protein') return cardPieProtein
+  return cardPieCarb
+}
+
+function cardSegsCaption(segs) {
+  if (!Array.isArray(segs)) return ''
+  var parts = []
+  for (var i = 0; i < segs.length; i++) {
+    var s = segs[i] || {}
+    var label = cardStr(s.label).trim()
+    var pct = Number(s.pct)
+    if (!label || !isFinite(pct) || pct <= 0) continue
+    parts.push(label + ' ' + Math.round(pct) + '%')
   }
   return parts.join(' · ')
 }
 
-/* 做到了 / 差一点：两块等宽浅色卡片，先算排版再画 */
-function cardBuildPillars(ctx, strengths, gaps) {
-  var gapX = 24
-  var colW = (cardInner - gapX) / 2
-  var padX = 30
-  var textX = 58
-  var textW = colW - textX - padX
-  var cols = [
-    { title: '做到了', tone: cardGreen, bg: cardGreenSoft, x: cardPad, items: Array.isArray(strengths) ? strengths.slice(0, 2) : [] },
-    { title: '差一点', tone: cardClay, bg: cardClaySoft, x: cardPad + colW + gapX, items: Array.isArray(gaps) ? gaps.slice(0, 2) : [] }
-  ]
-  var tallest = 0
-  var c
-  for (c = 0; c < cols.length; c++) {
-    var col = cols[c]
-    col.lines = []
-    cardUse(ctx, 31, 600, cardInk)
-    var total = 0
-    for (var i = 0; i < col.items.length; i++) {
-      var ls = cardWrapBal(ctx, cardStr(col.items[i]), textW, 2)
-      col.lines.push(ls)
-      total += ls.length
+/* 环形图：外径 390、环厚 88，12 点方向顺时针；pct=0 跳过 */
+function cardRing(ctx, cx, cy, segs) {
+  var rOut = 195
+  var rIn = 107
+  var list = []
+  var i
+  if (Array.isArray(segs)) {
+    for (i = 0; i < segs.length; i++) {
+      var pct = Number(segs[i] && segs[i].pct)
+      if (!isFinite(pct) || pct <= 0) continue
+      list.push({ pct: pct, color: cardToneColor(segs[i].tone) })
     }
-    if (total > tallest) tallest = total
   }
-  var lineCount = Math.max(2, tallest)
-  var naturalH = 120 + (lineCount - 1) * 46 + 44
-  var h = Math.max(272, naturalH)
-  var offset = Math.max(0, (h - naturalH) / 2)
-  return {
-    cols: cols, w: colW, h: h,
-    padX: padX, textX: textX, lineH: 46,
-    titleY: 60 + offset, itemY: 122 + offset
+  if (!list.length) return
+  var sum = 0
+  for (i = 0; i < list.length; i++) sum += list[i].pct
+  var acc = 0
+  for (i = 0; i < list.length; i++) {
+    var frac0 = acc / 100
+    var frac1 = (acc + list[i].pct) / 100
+    if (i === list.length - 1 && sum < 100) frac1 = 1
+    frac1 = Math.min(1, frac1)
+    var a0 = -Math.PI / 2 + frac0 * Math.PI * 2
+    var a1 = -Math.PI / 2 + frac1 * Math.PI * 2
+    ctx.fillStyle = list[i].color
+    if (a1 - a0 >= Math.PI * 2 - 0.0001) {
+      ctx.beginPath()
+      ctx.arc(cx, cy, rOut, 0, Math.PI * 2)
+      ctx.arc(cx, cy, rIn, 0, Math.PI * 2, true)
+      ctx.fill()
+    } else {
+      ctx.beginPath()
+      ctx.arc(cx, cy, rOut, a0, a1)
+      ctx.arc(cx, cy, rIn, a1, a0, true)
+      ctx.closePath()
+      ctx.fill()
+    }
+    acc += list[i].pct
   }
 }
 
-function cardDrawPillars(ctx, pillars, top) {
-  var c
-  for (c = 0; c < pillars.cols.length; c++) {
-    var col = pillars.cols[c]
+function cardDrawP2(ctx, data) {
+  ctx.fillStyle = cardBg
+  ctx.fillRect(0, 0, cardW, cardH)
+  var plate = data.plate || {}
+
+  cardKicker(ctx, '盘子', '我吃的 vs 一餐该有的')
+  var ttl = cardTtlLayout(ctx, cardStr(plate.title), [58, 53, 50], cardInnerW)
+  var ttlBottom = cardTtlDraw(ctx, ttl, 130.5)
+
+  var hasPhoto = cardHasPhoto(data)
+  var piesTop
+  if (hasPhoto) {
+    var stripTop = ttlBottom + 30
+    cardCover(ctx, data.photo, cardPad, stripTop, cardInnerW, 180, 0.58, 20)
+    piesTop = stripTop + 180 + 44
+  } else {
+    piesTop = ttlBottom + 44
+  }
+
+  var cy = piesTop + 195
+  var capTop = piesTop + 390 + 24
+  var colL = cardPad + cardInnerW / 4
+  var colR = cardPad + (cardInnerW * 3) / 4
+
+  cardRing(ctx, colL, cy, plate.mine)
+  cardRing(ctx, colR, cy, plate.guide)
+
+  cardDrawStr(ctx, '我这一餐', colL, capTop + 40.5, 36, 700, cardInk, 0, 'center')
+  cardDrawStr(ctx, '一餐该有的', colR, capTop + 40.5, 36, 700, cardInk, 0, 'center')
+  cardDrawStr(ctx, cardSegsCaption(plate.mine), colL, capTop + 85.75, 22, 400, cardMuted, 0, 'center')
+  cardDrawStr(ctx, cardSegsCaption(plate.guide), colR, capTop + 85.75, 22, 400, cardMuted, 0, 'center')
+
+  var insight = plate.insight || {}
+  cardInsightBox(ctx, capTop + 91 + 40, cardStr(insight.text), cardStr(insight.bold), cardInk)
+
+  var note = cardStr(plate.note).trim()
+  if (note) {
+    var nlay = cardPara(ctx, {
+      text: note, size: 23, weight: 400, color: cardMuted,
+      maxW: cardInnerW, maxLines: 2, lh: 39.1
+    })
+    cardDrawPara(ctx, nlay, cardPad, 1328 - nlay.height)
+  }
+
+  cardFoot(ctx, data.account)
+  cardPager(ctx, '2 / 4')
+}
+
+/* ---------------- P3 体检 ---------------- */
+
+function cardExamTone(tone) {
+  if (tone === 'low') return { fg: cardRed, pill: 'rgba(200,52,42,0.09)', bar: 'rgba(200,52,42,0.11)' }
+  if (tone === 'ok') return { fg: cardGreen, pill: 'rgba(35,104,72,0.10)', bar: 'rgba(27,23,20,0.075)' }
+  return { fg: cardAmber, pill: 'rgba(169,118,27,0.11)', bar: 'rgba(27,23,20,0.075)' }
+}
+
+function cardExamTargetLines(row) {
+  var tgt = row.target
+  if (Array.isArray(tgt)) return tgt.slice(0, 2).map(cardStr)
+  var s = cardStr(tgt).trim()
+  return s ? s.split('\n').slice(0, 2) : []
+}
+
+function cardExamRowHeight(row, isLast) {
+  var count = Math.max(1, cardExamTargetLines(row).length)
+  var lnH = 80.16 + Math.max(8.16, 27.13 + (count - 1) * 36)
+  return 26 + lnH + 18 + 9 + 26 + (isLast ? 0 : 1)
+}
+
+function cardExamRowDraw(ctx, row, top, isLast) {
+  var tone = cardExamTone(row.tone)
+  var baseline = top + 106
+
+  cardDrawStr(ctx, cardStr(row.label).trim(), cardPad, baseline, 31, 700, cardInk, 0, 'left')
+
+  var numStr = cardStr(row.value)
+  cardDrawStr(ctx, numStr, 236, baseline, 96, 700, tone.fg, -2.88, 'left')
+  var numW = cardMeasure(ctx, numStr, -2.88)
+  var unit = cardStr(row.unit).trim()
+  if (unit) cardDrawStr(ctx, unit, 236 + numW + 5, baseline, 32, 500, cardInk2, 0, 'left')
+
+  var stText = cardStr(row.status).trim()
+  if (stText) {
+    cardSetFont(ctx, 25, 700)
+    var stW = ctx.measureText(stText).width
+    var pillW = stW + 36
+    var pillTop = baseline - 34.1
     ctx.save()
-    ctx.fillStyle = col.bg
-    cardRoundRect(ctx, col.x, top, pillars.w, pillars.h, 18)
+    ctx.fillStyle = tone.pill
+    cardRoundRect(ctx, 498, pillTop, pillW, 50, 999)
     ctx.fill()
     ctx.restore()
-
-    cardUse(ctx, 32, 700, col.tone)
-    cardSpaced(ctx, col.title, col.x + pillars.padX, top + pillars.titleY, 2.4, col.tone)
-
-    var y = top + pillars.itemY
-    for (var i = 0; i < col.lines.length; i++) {
-      cardDot(ctx, col.x + 40, y - 10, 5, col.tone)
-      cardUse(ctx, 31, 600, cardInk)
-      for (var k = 0; k < col.lines[i].length; k++) {
-        ctx.fillText(col.lines[i][k], col.x + pillars.textX, y)
-        y += pillars.lineH
-      }
-    }
-  }
-}
-
-function cardDrawAnalysis(ctx, data) {
-  var r = data.result || {}
-  var mealType = cardStr(data.mealType || r.mealType || '一餐')
-  cardPaintPaper(ctx)
-  cardHeader(ctx, '营养分析 · ' + mealType, data)
-
-  /* 大标题 */
-  var headTop = 214
-  var ringR = 95
-  var ringCx = 870
-  var ringOuter = ringR + 6.5
-  var headW = ringCx - ringOuter - 56 - cardPad
-  var headBlock = cardWrapNoSplit(ctx, cardStr(r.headline).trim() || '这一餐的营养', headW, 2, [84, 80, 76, 72], 700)
-  var headSize = headBlock.size
-  var headLh = Math.round(headSize * 1.28)
-  var headLines = headBlock.lines
-  cardUse(ctx, headSize, 700, cardInk)
-  cardLines(ctx, headLines, cardPad, headTop + headSize * 0.86, headLh, cardInk)
-
-  /* 评分圆环 */
-  var score = cardInt(r.score, 0)
-  var titleCenter = headTop + (headLines.length * headLh) / 2
-  var ringCy = Math.max(titleCenter, 174 + 12 + ringOuter)
-  cardScoreRing(ctx, ringCx, ringCy, ringR, score)
-  var ringBottom = ringCy + ringOuter
-
-  /* 摘要 */
-  var summary = cardStr(r.summary)
-  var titleBottom = headTop + headLines.length * headLh
-  var sumTop = Math.max(titleBottom + 28, ringBottom + 24)
-  var sumLines = []
-  if (summary) {
-    cardUse(ctx, 31, 400, cardInk2)
-    sumLines = cardFixBreaks(ctx, cardWrapBal(ctx, summary, cardInner, 2), cardInner)
-    cardLines(ctx, sumLines, cardPad, sumTop + 31, 48, cardInk2)
-  }
-  var contentBottom = summary ? sumTop + 31 + (sumLines.length - 1) * 48 + 12 : titleBottom
-
-  /* 本餐能量与结构：弱化数据，只留两行文字概括 */
-  var energy = r.energy || {}
-  var overviewLabel = contentBottom + 56
-  cardUse(ctx, 23, 600, cardInk2)
-  cardSpaced(ctx, '本餐能量与结构', cardPad, overviewLabel, 2.6, cardInk2)
-
-  var kcal = cardInt(energy.kcal, 0)
-  var ratioRaw = cardInt(energy.ratio, 0)
-  var energyLine = '约 ' + kcal + ' kcal'
-  if (ratioRaw > 0) energyLine += ' · 占全天目标 ' + ratioRaw + '%'
-  cardUse(ctx, 28, 500, cardInk2)
-  ctx.fillText(energyLine, cardPad, overviewLabel + 50)
-
-  var macroPhrase = cardMacroPhrase(r.macros)
-  var phraseY = overviewLabel + 96
-  if (macroPhrase) {
-    cardUse(ctx, 25, 400, cardInk2)
-    var phraseLines = cardWrap(ctx, macroPhrase, cardInner, 2)
-    cardLines(ctx, phraseLines, cardPad, phraseY, 42, cardInk2)
-    contentBottom = phraseY + (phraseLines.length - 1) * 42 + 12
-  } else {
-    contentBottom = overviewLabel + 50 + 12
+    cardDrawStr(ctx, stText, 498 + 18, baseline, 25, 700, tone.fg, 0, 'left')
   }
 
-  /* 做到了 / 差一点：两块浅色底卡片，是这张卡的视觉重点 */
-  var pillars = cardBuildPillars(ctx, r.strengths, r.gaps)
-  var regionTop = contentBottom + 44
-  var regionBottom = 1206
-  var pillarTop = regionTop
-  if (regionBottom - regionTop > pillars.h) {
-    pillarTop = regionTop + (regionBottom - regionTop - pillars.h) / 2
+  var tgtLines = cardExamTargetLines(row)
+  for (var t = 0; t < tgtLines.length; t++) {
+    cardDrawStr(ctx, tgtLines[t], cardRight, baseline + t * 36, 24, 400, cardMuted, 0, 'right')
   }
-  cardDrawPillars(ctx, pillars, pillarTop)
 
-  cardFooter(ctx, data)
-}
-
-/* ---------------- advice ---------------- */
-
-function cardSpacedWidth(ctx, text, tracking) {
-  var chars = cardStr(text).split('')
-  var total = 0
-  for (var i = 0; i < chars.length; i++) total += ctx.measureText(chars[i]).width
-  if (chars.length > 1) total += tracking * (chars.length - 1)
-  return total
-}
-
-function cardSwapBand(ctx, top, swap) {
-  var chipLabel = '换一换'
-  var chipTrack = 1.4
-  cardUse(ctx, 19, 700, cardGreenSoft)
-  var labelW = cardSpacedWidth(ctx, chipLabel, chipTrack)
-  var chipX = cardPad + 32
-  var chipW = labelW + 44
-  var chipY = top + 31
-  var textX = chipX + chipW + 26
-
+  var count = Math.max(1, tgtLines.length)
+  var lnH = 80.16 + Math.max(8.16, 27.13 + (count - 1) * 36)
+  var barY = top + 26 + lnH + 18
   ctx.save()
-  ctx.fillStyle = cardGreenSoft
-  cardRoundRect(ctx, cardPad, top, cardInner, 96, 12)
+  ctx.fillStyle = tone.bar
+  cardRoundRect(ctx, cardPad, barY, cardInnerW, 9, 999)
   ctx.fill()
-  ctx.fillStyle = cardGreen
-  cardRoundRect(ctx, chipX, chipY, chipW, 34, 17)
+  var pct = cardClamp(Number(row.percent) || 0, 0, 100)
+  if (pct > 0) {
+    ctx.fillStyle = tone.fg
+    cardRoundRect(ctx, cardPad, barY, cardInnerW * pct / 100, 9, 999)
+    ctx.fill()
+  }
+  ctx.restore()
+
+  var h = 26 + lnH + 18 + 9 + 26 + (isLast ? 0 : 1)
+  if (!isLast) {
+    ctx.fillStyle = cardLine2
+    ctx.fillRect(cardPad, top + h - 1, cardInnerW, 1)
+  }
+  return h
+}
+
+function cardSayLayout(ctx, exam, hasPhoto) {
+  var say = exam.say || {}
+  var textW = hasPhoto ? 786 : cardW - 144
+  var lay = cardPara(ctx, {
+    text: cardStr(say.text), size: 30, weight: 400, color: cardInk2,
+    emphasis: cardStr(say.bold), emphColor: cardInk, emphWeight: 700,
+    maxW: textW, maxLines: 3, lh: 48
+  })
+  var h = hasPhoto ? 27 * 2 + Math.max(210, lay.height) + 2 : 34 * 2 + lay.height + 2
+  return { lay: lay, h: h, top: 1328 - h, photo: hasPhoto }
+}
+
+function cardSayDraw(ctx, data, exam, hasPhoto) {
+  var m = cardSayLayout(ctx, exam, hasPhoto)
+  ctx.save()
+  ctx.fillStyle = cardWhite
+  cardRoundRect(ctx, 0, m.top, cardW, m.h, 26)
   ctx.fill()
-  ctx.restore()
-
-  cardUse(ctx, 19, 700, cardGreenSoft)
-  cardSpaced(ctx, chipLabel, chipX + chipW / 2, top + 54, chipTrack, cardGreenSoft, 'center')
-
-  cardUse(ctx, 32, 600, cardInk)
-  var text = cardEllipsize(ctx, cardStr(swap), cardRight - textX - 32)
-  ctx.fillText(text, textX, top + 60)
-}
-
-/* 下一餐引用块：字号放大，块高随行数自适应 */
-function cardNextMealMetrics(ctx, nextMeal) {
-  cardUse(ctx, 35, 500, cardInk)
-  var lines = cardWrapBal(ctx, nextMeal, cardInner - 30, 2)
-  var h = 84 + (lines.length - 1) * 56 + 40
-  return { lines: lines, h: h }
-}
-
-function cardNextMeal(ctx, top, metrics) {
-  ctx.save()
-  ctx.fillStyle = cardClay
-  ctx.fillRect(cardPad, top, 4, metrics.h)
-  ctx.restore()
-  cardUse(ctx, 22, 700, cardClay)
-  cardSpaced(ctx, '下一餐', cardPad + 30, top + 28, 2.6, cardClay)
-  cardUse(ctx, 35, 500, cardInk)
-  cardLines(ctx, metrics.lines, cardPad + 30, top + 84, 56, cardInk)
-}
-
-function cardDrawAdvice(ctx, data) {
-  var r = data.result || {}
-  var advice = r.advice || {}
-  var mealType = cardStr(data.mealType || r.mealType || '一餐')
-  cardPaintPaper(ctx)
-  cardHeader(ctx, '改进建议 · ' + mealType, data)
-
-  var titleTop = 214
-  var titleBlock = cardWrapNoSplit(ctx, cardStr(advice.headline).trim() || '下一餐这样补', cardInner, 2, [70, 66, 62, 58], 700)
-  var titleSize = titleBlock.size
-  var titleLh = Math.round(titleSize * 1.31)
-  var titleLines = titleBlock.lines
-  cardUse(ctx, titleSize, 700, cardInk)
-  cardLines(ctx, titleLines, cardPad, titleTop + titleSize * 0.86, titleLh, cardInk)
-  var titleBottom = titleTop + titleLines.length * titleLh
-
-  var items = Array.isArray(advice.items) ? advice.items.slice(0, 3) : []
-  var swap = cardStr(advice.swap).trim()
-  var nextMeal = cardStr(advice.nextMeal).trim()
-
-  /* 三条编号建议：只留标题，字号放大，行距放宽 */
-  var rowH = 158
-  var y = titleBottom + 50
-  var k
-  for (k = 0; k < items.length; k++) {
-    var it = items[k] || {}
-    var numText = ('0' + (k + 1)).slice(-2)
-    cardNum(ctx, 56, 700, cardGreen)
-    ctx.fillText(numText, cardPad, y + 96)
-    cardUse(ctx, 46, 700, cardInk)
-    ctx.fillText(cardEllipsize(ctx, cardStr(it.title), cardRight - 232), 232, y + 96)
-    if (k < items.length - 1) cardHr(ctx, y + rowH, cardPad, cardRight, cardRule, 1)
-    y += rowH
-  }
-  var itemsBottom = y
-
-  /* 底部两个区块：整组在剩余空间里居中 */
-  var nextMetrics = nextMeal ? cardNextMealMetrics(ctx, nextMeal) : null
-  var groupH = 0
-  var groupCount = 0
-  if (swap) {
-    groupH += 96
-    groupCount++
-  }
-  if (nextMetrics) {
-    groupH += nextMetrics.h
-    groupCount++
-  }
-  if (groupCount > 1) groupH += 56
-
-  var regionTop = itemsBottom + 30
-  var regionBottom = 1206
-  var off = (regionBottom - regionTop - groupH) / 2
-  var gy = regionTop + cardClamp(off, 0, 92)
-
-  if (swap) {
-    cardSwapBand(ctx, gy, swap)
-    gy += 96 + (nextMetrics ? 56 : 0)
-  }
-  if (nextMetrics) cardNextMeal(ctx, gy, nextMetrics)
-
-  cardFooter(ctx, data)
-}
-
-/* ---------------- invite ---------------- */
-
-function cardInviteDecor(ctx) {
-  ctx.save()
-  ctx.strokeStyle = 'rgba(243,237,223,0.09)'
-  ctx.lineWidth = 1.6
-  var i
-  for (i = 0; i < 3; i++) {
-    ctx.beginPath()
-    ctx.arc(1032, 214, 118 + i * 68, 0, Math.PI * 2)
-    ctx.stroke()
-  }
-  ctx.restore()
-}
-
-/* 投稿三步：横向三栏，小字号 + 米色低透明度，填满 CTA 与话题标签之间的空白 */
-function cardInviteSteps(ctx, top) {
-  var steps = ['拍下你的三餐', '发到评论区', '我帮你看缺口']
-  var h = 148
-  var colW = cardInner / 3
-  var i
-
-  ctx.save()
-  ctx.strokeStyle = 'rgba(243,237,223,0.16)'
-  ctx.lineWidth = 1.2
-  cardRoundRect(ctx, cardPad, top, cardInner, h, 3)
+  ctx.strokeStyle = cardLine2
+  ctx.lineWidth = 1
+  cardRoundRect(ctx, 0.5, m.top + 0.5, cardW - 1, m.h - 1, 26)
   ctx.stroke()
   ctx.restore()
 
-  for (i = 0; i < steps.length; i++) {
-    var cx = cardPad + colW * i + 44
-    if (i > 0) {
-      ctx.save()
-      ctx.strokeStyle = 'rgba(243,237,223,0.13)'
-      ctx.lineWidth = 1
-      ctx.beginPath()
-      ctx.moveTo(cardPad + colW * i, top + 30)
-      ctx.lineTo(cardPad + colW * i, top + h - 30)
-      ctx.stroke()
-      ctx.restore()
-    }
-    ctx.save()
-    ctx.strokeStyle = 'rgba(243,237,223,0.3)'
-    ctx.lineWidth = 1.3
-    ctx.beginPath()
-    ctx.arc(cx + 14, top + 42, 15, 0, Math.PI * 2)
-    ctx.stroke()
-    ctx.restore()
-    ctx.save()
-    ctx.textAlign = 'center'
-    cardNum(ctx, 15, 600, 'rgba(243,237,223,0.68)')
-    ctx.fillText(String(i + 1), cx + 14, top + 48)
-    ctx.restore()
-    cardUse(ctx, 26, 400, i === steps.length - 1 ? 'rgba(243,237,223,0.84)' : 'rgba(243,237,223,0.6)')
-    ctx.fillText(steps[i], cx, top + 110)
+  if (hasPhoto) {
+    cardCover(ctx, data.photo, 27, m.top + 27, 210, 210, 0.5, 18)
+    var tx = 27 + 210 + 24
+    cardDrawPara(ctx, m.lay, tx, m.top + 27 + (210 - m.lay.height) / 2)
+  } else {
+    cardDrawPara(ctx, m.lay, 72, m.top + 34)
   }
 }
 
-function cardDrawInvite(ctx, data) {
-  var r = data.result || {}
-  var invite = r.invite || {}
-  cardPaintDeep(ctx)
-  cardInviteDecor(ctx)
-  cardHeader(ctx, '投稿引导', data, true)
+function cardDrawP3(ctx, data) {
+  ctx.fillStyle = cardBg
+  ctx.fillRect(0, 0, cardW, cardH)
+  var exam = data.exam || {}
+  var rows = Array.isArray(exam.rows) ? exam.rows.slice(0, 3) : []
+  var hasPhoto = cardHasPhoto(data)
 
-  /* 黄色小眉标 */
-  ctx.save()
-  ctx.fillStyle = cardYellow
-  cardRoundRect(ctx, cardPad, 252, 72, 9, 4.5)
-  ctx.fill()
-  ctx.restore()
+  cardKicker(ctx, '体检', '三个数字看这一餐')
 
-  /* 巨大问句：11–12 个汉字会自然折成两行；万一单行仍然越界，按 measureText 自动降字号（下限 84px） */
-  var qBlock = cardFitBlock(ctx, cardStr(invite.question).trim() || '今天你吃了什么？', cardInner, 2, [104, 98, 92, 88, 84], 700)
-  var qSize = qBlock.size
-  var qLh = Math.round(qSize * 1.27)
-  var qTop = 396
-  cardUse(ctx, qSize, 700, cardCream)
-  cardLines(ctx, qBlock.lines, cardPad, qTop, qLh, cardCream)
-  var qBottom = qTop + (qBlock.lines.length - 1) * qLh
+  var sayTop = cardSayLayout(ctx, exam, hasPhoto).top
+  var sizes = [58, 53, 50]
+  var chosen = null
+  var si
+  for (si = 0; si < sizes.length; si++) {
+    var ttl = cardTtlLayout(ctx, cardStr(exam.title), [sizes[si]], cardInnerW)
+    var ttlBottom = 130.5 + ttl.lay.height
+    var start = ttlBottom + 36
+    var acc = start
+    var r
+    for (r = 0; r < rows.length; r++) acc += cardExamRowHeight(rows[r], r === rows.length - 1)
+    var insTop = acc + 40
+    var insLay = cardPara(ctx, {
+      text: cardStr(exam.insight), size: 31, weight: 400, color: cardInk2,
+      maxW: cardRight - (cardPad + 4 + 32) - 32, maxLines: 3, lh: 49.6
+    })
+    if (insTop + 56 + insLay.height <= sayTop - 20) {
+      chosen = { ttl: ttl, top: start, insTop: insTop }
+      break
+    }
+  }
+  if (!chosen) {
+    var ttlF = cardTtlLayout(ctx, cardStr(exam.title), [50], cardInnerW)
+    var startF = 130.5 + ttlF.lay.height + 36
+    var accF = startF
+    var rf
+    for (rf = 0; rf < rows.length; rf++) accF += cardExamRowHeight(rows[rf], rf === rows.length - 1)
+    chosen = { ttl: ttlF, top: startF, insTop: accF + 40 }
+  }
 
-  /* 两行说明 */
-  var lines = (Array.isArray(invite.lines) ? invite.lines.slice(0, 2) : []).filter(function (s) {
-    return cardStr(s).trim() !== ''
+  cardTtlDraw(ctx, chosen.ttl, 130.5)
+  var y = chosen.top
+  for (var i = 0; i < rows.length; i++) {
+    y += cardExamRowDraw(ctx, rows[i], y, i === rows.length - 1)
+  }
+  cardInsightBox(ctx, chosen.insTop, cardStr(exam.insight), '', cardInk)
+  cardSayDraw(ctx, data, exam, hasPhoto)
+  cardFoot(ctx, data.account)
+  cardPager(ctx, '3 / 4')
+}
+
+/* ---------------- P4 改一处 ---------------- */
+
+/* 结果文本：→ 左侧的数字起到末尾用绿色 700 */
+function cardResultParts(text) {
+  var s = cardStr(text)
+  var arrow = s.indexOf('→')
+  if (arrow < 0) return [{ t: s, green: false }]
+  var start = arrow
+  while (start > 0 && s.charAt(start - 1) !== ' ') start--
+  if (start > 0) start++
+  return [
+    { t: s.slice(0, start), green: false },
+    { t: s.slice(start), green: true }
+  ]
+}
+
+function cardDrawInline(ctx, parts, x, base) {
+  var cx = x
+  for (var i = 0; i < parts.length; i++) {
+    cx = cardDrawStr(ctx, parts[i].t, cx, base, parts[i].size, parts[i].weight, parts[i].color, parts[i].ls || 0, 'left')
+  }
+  return cx - x
+}
+
+function cardDrawP4(ctx, data) {
+  ctx.fillStyle = cardBg
+  ctx.fillRect(0, 0, cardW, cardH)
+  var fix = data.fix || {}
+  var rows = Array.isArray(fix.rows) ? fix.rows.slice(0, 3) : []
+  var ask = fix.ask || {}
+
+  cardKicker(ctx, '改一处', '明天的' + cardStr(data.mealType || '这一餐'))
+  var ttl = cardTtlLayout(ctx, cardStr(fix.title), [58, 53, 50], cardInnerW)
+  var ttlBottom = cardTtlDraw(ctx, ttl, 130.5)
+
+  /* 底部三块从底往上量：CTA 固定，提问卡贴底 112 */
+  var qLay = cardPara(ctx, {
+    text: cardStr(ask.q), size: 32, weight: 700, color: cardInk,
+    maxW: cardW - 144, maxLines: 2, lh: 48
   })
-  if (!lines.length) lines = ['我把三餐都记在这里，一天一张卡片。', '把你的三餐发到评论区，我帮你看缺口。']
-  var lineTop = qBottom + 76
-  cardUse(ctx, 31, 400, 'rgba(243,237,223,0.8)')
-  var ly = lineTop
+  var optTexts = Array.isArray(ask.options) ? ask.options.slice(0, 2).map(cardStr) : []
+  var optH = optTexts.length ? 60 : 0
+  var hintText = cardStr(ask.hint).trim()
+  var hintH = hintText ? 23 * 1.5 : 0
+  var askH = 30 + qLay.height + (optTexts.length ? 18 + optH : 0) + (hintText ? 16 + hintH : 0) + 30
+  var askTop = 1328 - askH
+
+  var faqLay = null
+  var whyLay = null
+  var rowTops = []
+  var rowsTop = ttlBottom + 38
+  var wanted = rowsTop + rows.length * 169 + 60
+
+  /* why */
+  var why = fix.why || {}
+  var whyTop = rowsTop + rows.length * 169 + 60
+  whyLay = cardPara(ctx, {
+    text: cardStr(why.text), size: 29, weight: 400, color: cardMuted,
+    emphasis: cardStr(why.bold), emphColor: cardInk2, emphWeight: 700,
+    maxW: cardInnerW - 23, maxLines: 2, lh: 46.98
+  })
+  var faqTop = whyTop + whyLay.height + 46
+  var faq = fix.faq || {}
+  var qText = cardStr(faq.q).trim()
+  var aText = cardStr(faq.a && faq.a.text !== undefined ? faq.a.text : faq.a)
+  cardSetFont(ctx, 26, 700)
+  var qW = qText ? ctx.measureText(qText).width : 0
+  var aX = cardPad + qW + (qText ? 18 : 0)
+  faqLay = cardPara(ctx, {
+    text: aText, size: 26, weight: 400, color: cardInk2,
+    emphasis: cardStr(faq.a && faq.a.bold), emphColor: cardGreen, emphWeight: 700,
+    maxW: cardRight - aX, maxLines: 2, lh: 39
+  })
+  var faqH = Math.max(39, faqLay.height)
+
+  /* 建议行 */
+  var y = rowsTop
   var i
-  for (i = 0; i < lines.length; i++) {
-    var seg = cardEllipsize(ctx, cardStr(lines[i]), cardInner)
-    ctx.fillText(seg, cardPad, ly)
-    ly += 50
+  for (i = 0; i < rows.length; i++) {
+    var row = rows[i] || {}
+    var isLast = i === rows.length - 1
+    var rowH = 168 + (isLast ? 0 : 1)
+    rowTops.push(y)
+
+    /* 序号块 */
+    var noText = cardStr(row.no).trim() || ('0' + (i + 1)).slice(-2)
+    ctx.save()
+    ctx.fillStyle = row.strong ? cardGreen : '#C8BCAB'
+    cardRoundRect(ctx, cardPad, y + 58, 52, 52, 12)
+    ctx.fill()
+    ctx.restore()
+    cardDrawStr(ctx, noText, cardPad + 26, y + 58 + 34.6, 23, 700, cardWhite, 0, 'center')
+
+    /* 右侧结果 */
+    var rsParts = cardResultParts(row.result)
+    var rsLay = []
+    var rsW = 0
+    var rsSize = 26
+    var part
+    for (var k = 0; k < rsParts.length; k++) {
+      cardSetFont(ctx, rsSize, rsParts[k].green ? 700 : 400)
+      var w = ctx.measureText(rsParts[k].t).width
+      rsLay.push({ t: rsParts[k].t, w: w, green: rsParts[k].green })
+      rsW += w
+    }
+    var rsX = cardRight - rsW
+    cardSetFont(ctx, rsSize, 400)
+    for (k = 0; k < rsLay.length; k++) {
+      cardDrawStr(ctx, rsLay[k].t, rsX, y + 95, rsSize, rsLay[k].green ? 700 : 400, rsLay[k].green ? cardGreen : cardMuted, 0, 'left')
+      rsX += rsLay[k].w
+    }
+
+    /* 主文：40px，放不下缩到 34 再截断 */
+    var titleMax = cardRight - 146 - 22 - rsW
+    var titleLay = cardPara(ctx, {
+      text: cardStr(row.title), size: 40, weight: 700, color: cardInk,
+      maxW: titleMax, maxLines: 1, lh: 50, ls: -0.4
+    })
+    if (cardTruncated(titleLay)) {
+      titleLay = cardPara(ctx, {
+        text: cardStr(row.title), size: 34, weight: 700, color: cardInk,
+        maxW: titleMax, maxLines: 1, lh: 42.5, ls: -0.34
+      })
+    }
+    cardDrawPara(ctx, titleLay, 146, y + 59)
+
+    if (!isLast) {
+      ctx.fillStyle = cardLine2
+      ctx.fillRect(cardPad, y + rowH - 1, cardInnerW, 1)
+    }
+    y += rowH
   }
 
-  /* CTA 胶囊 */
-  var cta = cardStr(invite.cta).trim() || '评论区晒出你今天的早餐'
-  var ctaH = 108
-  var ctaTop = ly - 50 + 66
-  cardUse(ctx, 34, 600, cardDeep)
-  var ctaText = cardEllipsize(ctx, cta, 620)
-  var ctaW = 48 + ctx.measureText(ctaText).width + 30 + 34 + 46
+  /* 表态引文 */
+  var whyH = Math.max(whyLay.height, 47)
+  ctx.fillStyle = cardLine
+  ctx.fillRect(cardPad, whyTop, 3, whyH)
+  cardDrawPara(ctx, whyLay, cardPad + 23, whyTop)
+
+  /* FAQ */
+  if (qText) cardDrawStr(ctx, qText, cardPad, cardBase(faqTop, 26, 39), 26, 700, cardInk, 0, 'left')
+  cardDrawPara(ctx, faqLay, aX, faqTop)
+
+  /* 提问卡（整幅贴底） */
   ctx.save()
-  ctx.fillStyle = cardCream
-  cardRoundRect(ctx, cardPad, ctaTop, ctaW, ctaH, ctaH / 2)
+  ctx.fillStyle = cardAskBg
+  cardRoundRect(ctx, 0, askTop, cardW, askH, 26)
   ctx.fill()
   ctx.restore()
-  cardUse(ctx, 34, 600, cardDeep)
-  ctx.fillText(ctaText, cardPad + 48, ctaTop + ctaH / 2 + 12)
-  var arrowX = cardPad + 48 + ctx.measureText(ctaText).width + 30
-  cardArrow(ctx, arrowX, ctaTop + ctaH / 2, 34, cardDeep, 3.4)
-  var ctaBottom = ctaTop + ctaH
-
-  /* 话题标签：贴近页脚，稳定底部重心 */
-  var tags = Array.isArray(invite.tags) ? invite.tags.slice(0, 3) : []
-  if (!tags.length) tags = ['#一日三餐', '#营养记录', '#今天吃什么']
-  cardUse(ctx, 26, 500, 'rgba(243,237,223,0.7)')
-  var tagRows = []
-  var curRow = []
-  var curX = cardPad
-  var ri
-  var ti
-  for (i = 0; i < tags.length; i++) {
-    var tagText = cardEllipsize(ctx, cardStr(tags[i]), 300)
-    var tw = ctx.measureText(tagText).width
-    if (curRow.length && curX + tw > cardRight) {
-      tagRows.push(curRow)
-      curRow = []
-      curX = cardPad
+  var ay = askTop + 30
+  ay += cardDrawPara(ctx, qLay, cardPad, ay)
+  if (optTexts.length) {
+    ay += 18
+    var ox = cardPad
+    for (i = 0; i < optTexts.length; i++) {
+      cardSetFont(ctx, 25, 400)
+      var tw = ctx.measureText(optTexts[i]).width
+      var pw = tw + 44
+      ctx.save()
+      ctx.fillStyle = cardWhite
+      cardRoundRect(ctx, ox, ay, pw, 60, 999)
+      ctx.fill()
+      ctx.strokeStyle = cardLine
+      ctx.lineWidth = 1
+      cardRoundRect(ctx, ox + 0.5, ay + 0.5, pw - 1, 59, 999)
+      ctx.stroke()
+      ctx.restore()
+      cardDrawStr(ctx, optTexts[i], ox + 22, ay + 38.1, 25, 400, cardInk2, 0, 'left')
+      ox += pw + 14
     }
-    curRow.push({ t: tagText, x: curX })
-    curX += tw + 30
+    ay += 60
   }
-  if (curRow.length) tagRows.push(curRow)
-  var tagFirstY = 1148 - (tagRows.length - 1) * 42
-  for (ri = 0; ri < tagRows.length; ri++) {
-    for (ti = 0; ti < tagRows[ri].length; ti++) {
-      cardUse(ctx, 26, 500, 'rgba(243,237,223,0.7)')
-      ctx.fillText(tagRows[ri][ti].t, tagRows[ri][ti].x, tagFirstY + ri * 42)
-    }
+  if (hintText) {
+    ay += 16
+    cardDrawStr(ctx, hintText, cardPad, cardBase(ay, 23, 34.5), 23, 400, cardMuted, 0, 'left')
   }
 
-  /* 投稿三步：在 CTA 与话题标签之间居中 */
-  var stepH = 148
-  var stepTop = ctaBottom + 12
-  var stepBottom = tagFirstY - 26
-  var stepRoom = stepBottom - stepTop
-  if (stepRoom > stepH + 40) {
-    cardInviteSteps(ctx, stepTop + (stepRoom - stepH) / 2)
-  } else if (stepRoom > stepH - 24) {
-    cardInviteSteps(ctx, stepTop)
-  }
-
-  /* 页脚：分隔线 + 右下账号水印 + 画布底部居中免责行 */
-  cardHr(ctx, 1240, cardPad, cardRight, 'rgba(243,237,223,0.16)', 1.2)
-
-  /* 账号水印：超长 handle 自动降字号，避免压满整行 */
-  var mark = cardWatermark(data.handle)
-  var markSize = 32
-  ctx.font = cardF(markSize, 700)
-  while (markSize > 22 && ctx.measureText(mark).width > 560) {
-    markSize -= 2
-    ctx.font = cardF(markSize, 700)
-  }
-  cardUse(ctx, markSize, 700, cardCream)
-  ctx.textAlign = 'right'
-  ctx.fillText(mark, cardRight, 1292)
-  ctx.textAlign = 'left'
-
-  cardUse(ctx, 19, 400, 'rgba(243,237,223,0.45)')
-  ctx.textAlign = 'center'
-  ctx.fillText(cardDisclaimer, cardW / 2, 1342)
-  ctx.textAlign = 'left'
+  /* CTA 页脚 */
+  var ctaY = 1384
+  var cx = cardDrawStr(ctx, '关注 ', cardPad, ctaY, 25, 400, cardMuted, 0, 'left')
+  cx += cardDrawStr(ctx, cardStr(data.account), cx, ctaY, 25, 700, cardInk, 0, 'left')
+  cardDrawStr(ctx, '，每天只改一处', cx, ctaY, 25, 400, cardMuted, 0, 'left')
+  cardPager(ctx, '4 / 4')
 }
 
 /* ---------------- 入口 ---------------- */
@@ -1009,20 +919,17 @@ function cardDraw(kind, data, canvas) {
   var w = canvas.width || cardW
   var h = canvas.height || cardH
   var d = data || {}
-  d.result = d.result || {}
-
   ctx.save()
   ctx.setTransform(1, 0, 0, 1, 0, 0)
   ctx.clearRect(0, 0, w, h)
   ctx.scale(w / cardW, h / cardH)
   ctx.textBaseline = 'alphabetic'
   ctx.textAlign = 'left'
-  ctx.lineCap = 'butt'
-
   try {
-    if (kind === 'advice') cardDrawAdvice(ctx, d)
-    else if (kind === 'invite') cardDrawInvite(ctx, d)
-    else cardDrawAnalysis(ctx, d)
+    if (kind === 'p2') cardDrawP2(ctx, d)
+    else if (kind === 'p3') cardDrawP3(ctx, d)
+    else if (kind === 'p4') cardDrawP4(ctx, d)
+    else cardDrawP1(ctx, d)
   } finally {
     ctx.restore()
   }
@@ -1141,7 +1048,7 @@ const panelCss = `
 .nu-banner-form{margin-top:14px;margin-bottom:0}
 .nu-banner-page{margin-top:20px;margin-bottom:0}
 
-.nu-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.nu-cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
 .nu-card{display:flex;flex-direction:column;min-width:0;border:1px solid var(--dsw-alias-border-l2);border-radius:14px;overflow:hidden;background:var(--dsw-alias-bg-base)}
 .nu-card-head{display:flex;align-items:center;gap:8px;padding:9px 10px 9px 13px;border-bottom:1px solid var(--dsw-alias-border-l1)}
 .nu-card-index{font-size:11px;font-variant-numeric:tabular-nums;color:var(--dsw-alias-label-secondary);letter-spacing:.04em}
@@ -1149,6 +1056,20 @@ const panelCss = `
 .nu-card-btn{margin-left:auto}
 .nu-canvas-wrap{position:relative;width:100%;aspect-ratio:3/4;background:color-mix(in srgb,var(--dsw-alias-label-primary) 4%,transparent)}
 .nu-canvas{display:block;width:100%;height:100%}
+.nu-legacy{display:flex;flex-direction:column;align-items:flex-start;gap:10px;padding:22px 20px;border:1px dashed var(--dsw-alias-border-l2);border-radius:14px;background:color-mix(in srgb,var(--dsw-alias-label-primary) 2%,transparent)}
+.nu-legacy-title{margin:0;font-size:14px;font-weight:650}
+.nu-legacy-desc{margin:0;font-size:13px;line-height:1.7;color:var(--dsw-alias-label-secondary)}
+
+/* 本餐照片（可选） */
+.nu-photo{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px;padding:12px 14px;border:1px solid var(--dsw-alias-border-l1);border-radius:12px;background:color-mix(in srgb,var(--dsw-alias-label-primary) 3%,transparent)}
+.nu-photo-thumb{width:96px;height:96px;flex:none;border-radius:10px;object-fit:cover;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-base);display:block}
+.nu-photo-main{flex:1 1 180px;min-width:0;display:flex;flex-direction:column;gap:3px}
+.nu-photo-title{font-size:12.5px;font-weight:600;color:var(--dsw-alias-label-primary)}
+.nu-photo-name{font-size:12.5px;color:var(--dsw-alias-label-primary);word-break:break-all}
+.nu-photo-hint{font-size:12px;line-height:1.55;color:var(--dsw-alias-label-secondary)}
+.nu-photo-actions{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.nu-file{display:none}
+.nu-photo-error{margin-top:8px;font-size:12px;line-height:1.5;color:var(--dsw-alias-state-error-primary)}
 
 .nu-post{display:flex;flex-direction:column;gap:10px;margin-top:16px;padding:16px 18px;border:1px solid var(--dsw-alias-border-l2);border-left:3px solid var(--dsw-alias-brand-primary);border-radius:12px;background:var(--dsw-alias-bg-layer-1)}
 .nu-post-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
@@ -1212,7 +1133,7 @@ const panelCss = `
 
 .nu-working{display:flex;align-items:center;gap:10px;margin-bottom:14px;padding:11px 14px;border-radius:11px;border:1px solid var(--dsw-alias-border-l1);background:color-mix(in srgb,var(--dsw-alias-label-primary) 3%,transparent);font-size:12.5px;color:var(--dsw-alias-label-secondary)}
 .nu-section[data-section="result"],.nu-section[data-section="score"],.nu-section[data-section="post"]{scroll-margin-top:116px}
-.nu-skeleton-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.nu-skeleton-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
 .nu-skel{position:relative;aspect-ratio:3/4;border-radius:14px;border:1px solid var(--dsw-alias-border-l2);background:color-mix(in srgb,var(--dsw-alias-label-primary) 7%,transparent);animation:nu-pulse 1.5s ease-in-out infinite}
 .nu-skel::after{content:"";position:absolute;inset:14% 10%;border-radius:8px;border:1px solid var(--dsw-alias-border-l2);opacity:.6}
 .nu-skeleton-row{display:flex;align-items:center;gap:8px;margin:12px 0 14px;font-size:12.5px;color:var(--dsw-alias-label-secondary)}
@@ -1222,8 +1143,8 @@ const panelCss = `
 .nu-loading-block.is-tall{height:220px}
 
 @media (max-width:1080px){
-  .nu-cards,.nu-skeleton-grid{grid-template-columns:minmax(0,1fr);justify-items:center}
-  .nu-card,.nu-skel{width:min(100%,460px)}
+  .nu-cards,.nu-skeleton-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .nu-card,.nu-skel{width:100%}
 }
 @media (max-width:760px){
   .nu-topbar-inner{padding:15px 20px 12px}
@@ -1235,6 +1156,7 @@ const panelCss = `
   .nu-section-head{padding:14px 15px}
   .nu-section-body{padding:16px 15px 18px}
   .nu-summary{padding:14px 15px}
+  .nu-cards,.nu-skeleton-grid{grid-template-columns:minmax(0,1fr);justify-items:center}
   .nu-card,.nu-skel{width:min(100%,420px)}
   .nu-post-actions{margin-left:0;width:100%}
   .nu-score-day{grid-template-columns:minmax(0,1fr);gap:8px}
@@ -1281,9 +1203,10 @@ const panelGoalOptions = [
 ];
 
 const panelCardMeta = [
-  { kind: 'analysis', name: '营养分析', label: '下载营养分析', file: '01-营养分析.png' },
-  { kind: 'advice', name: '改进建议', label: '下载改进建议', file: '02-改进建议.png' },
-  { kind: 'invite', name: '引导投稿', label: '下载引导投稿', file: '03-引导投稿.png' },
+  { kind: 'p1', name: '封面', label: '下载封面', file: '01-封面.png' },
+  { kind: 'p2', name: '盘子', label: '下载盘子', file: '02-盘子.png' },
+  { kind: 'p3', name: '体检', label: '下载体检', file: '03-体检.png' },
+  { kind: 'p4', name: '改一处', label: '下载改一处', file: '04-改一处.png' },
 ];
 
 const panelGenderLabel = { male: '男', female: '女' };
@@ -1388,34 +1311,67 @@ function panelDateText() {
   return now.getFullYear() + '年' + (now.getMonth() + 1) + '月' + now.getDate() + '日 ' + panelWeekdays[now.getDay()];
 }
 
-/** 卡片水印账号：优先用档案里填的自媒体账号，没有就回退到发布账号。 */
-const panelAccountFallback = '@AI说餐谱';
+/** 卡片账号：档案里的自媒体账号（纯文字、不带 @），空则回退到发布账号。 */
+const panelAccountFallback = 'AI说餐谱';
 
-function panelHandle(profile) {
+function panelAccountName(profile) {
   const name = profile && profile.name ? String(profile.name).trim() : '';
   if (!name) return panelAccountFallback;
-  return name.charAt(0) === '@' ? name : '@' + name;
+  return name.replace(/^@+/, '').trim() || panelAccountFallback;
+}
+
+/** 卡片左下身份行：42 岁 · 175cm · 67kg（模板不带性别） */
+function panelProfileLine(profile) {
+  const data = profile || {};
+  const head = [];
+  if (Number(data.age) > 0) head.push(Number(data.age) + ' 岁');
+  const parts = [];
+  if (head.length) parts.push(head.join(' '));
+  if (Number(data.height) > 0) parts.push(Number(data.height) + 'cm');
+  if (Number(data.weight) > 0) parts.push(Number(data.weight) + 'kg');
+  return parts.join(' · ');
+}
+
+/** 新版四页图文（p1-p4）才有 cover；旧结果没有。 */
+function panelHasDeck(result) {
+  return Boolean(result && result.cover && typeof result.cover === 'object');
+}
+
+/** 组装传给 cardDraw 的 data：Host 结果 + 面板本地字段（日期 / 账号 / 身份行 / 照片 / 原文）。 */
+function panelCardData(result, profile, mealType, text, photo) {
+  const base = result && typeof result === 'object' ? result : {};
+  return Object.assign({}, base, {
+    mealType: base.mealType || mealType,
+    date: panelDateText(),
+    account: panelAccountName(profile),
+    profileLine: panelProfileLine(profile),
+    photo: photo || null,
+    mealText: String(text || base.mealText || '').trim(),
+  });
 }
 
 /** 把接口返回的图文文案整理成可渲染的结构（旧数据没有 post 时用现有字段拼）。 */
 function panelPostOf(result, profile) {
   const data = result && result.post && typeof result.post === 'object' ? result.post : {};
   const mealType = (result && result.mealType) || '这一餐';
+  const deck = panelHasDeck(result);
   const p = profile || {};
   const gender = p.gender === 'male' ? '男' : p.gender === 'female' ? '女' : '';
   const title = String(data.title || '')
     || ((result && result.headline ? String(result.headline) : '这一餐吃得怎么样') + ' #' + mealType);
   const body = String(data.body || '')
     || (result && result.summary ? String(result.summary) : '');
+  // v2 不再输出「备注：性别、年龄…」那一行（身份已经在封面左下角）。
   const remark = String(data.remark || '')
-    || ['备注：' + (gender || '—'), (p.age || '—') + '岁', (p.height || '—') + 'cm', (p.weight || '—') + 'kg'].join('、');
+    || (deck ? '' : ['备注：' + (gender || '—'), (p.age || '—') + '岁', (p.height || '—') + 'cm', (p.weight || '—') + 'kg'].join('、'));
   const tags = (Array.isArray(data.tags) && data.tags.length ? data.tags : ['#AI说餐谱', '#' + mealType, '#上班族', '#久坐族'])
     .map(function (tag) { return String(tag); })
     .slice(0, 4);
   const lines = Array.isArray(data.lines) && data.lines.length
     ? data.lines.map(function (line) { return String(line); })
     : panelSplitClauses(body);
-  const text = String(data.text || '') || [title, lines.join('\n'), remark, tags.join(' ')].join('\n\n');
+  const text = String(data.text || '')
+    || [title, lines.join('\n'), remark, tags.join(' ')].filter(Boolean).join('\n\n');
   return { title: title, body: body, lines: lines, remark: remark, tags: tags, text: text };
 }
 
@@ -1502,6 +1458,23 @@ function panelDownloadCanvas(canvas, name) {
   });
 }
 
+/** 把本地照片对象解码成可画进 canvas 的 HTMLImageElement；失败返回 null（回退无照片版式）。 */
+async function panelDecodePhoto(photo) {
+  if (!photo || !photo.url) return null;
+  try {
+    if (photo.img && photo.img.src === photo.url) {
+      if (!photo.img.complete) await photo.img.decode();
+      return photo.img.naturalWidth > 0 ? photo.img : null;
+    }
+    const image = new Image();
+    image.src = photo.url;
+    await image.decode();
+    return image.naturalWidth > 0 ? image : null;
+  } catch (err) {
+    return null;
+  }
+}
+
 /** 复制文本：优先剪贴板 API，失败时退回 execCommand。 */
 async function panelCopyText(text) {
   const value = String(text == null ? '' : text);
@@ -1575,20 +1548,31 @@ function NutritionPanel() {
   const [downloading, setDownloading] = React.useState(false);
   const [copyState, setCopyState] = React.useState('');
 
+  // 生成这一餐时用的原文（编辑框之后可能被改，卡片仍用当次原文）
+  const [resultText, setResultText] = React.useState('');
+  // 本餐照片：只在浏览器本地使用，{ url, img, name }，不上传 Host
+  const [photo, setPhoto] = React.useState(null);
+  const [photoError, setPhotoError] = React.useState('');
+
   const resultRef = React.useRef(null);
   const copyTimerRef = React.useRef(0);
   const pendingScrollRef = React.useRef(false);
   const canvasARef = React.useRef(null);
   const canvasBRef = React.useRef(null);
   const canvasCRef = React.useRef(null);
+  const canvasDRef = React.useRef(null);
   const canvasRefs = React.useMemo(function () {
-    return [canvasARef, canvasBRef, canvasCRef];
-  }, [canvasARef, canvasBRef, canvasCRef]);
+    return [canvasARef, canvasBRef, canvasCRef, canvasDRef];
+  }, [canvasARef, canvasBRef, canvasCRef, canvasDRef]);
+  const fileInputRef = React.useRef(null);
+  const photoRef = React.useRef(null);
 
   const metrics = panelBodyMetrics(profile);
   const savedMetrics = panelBodyMetrics(savedProfile);
   const summaryChips = panelSummaryChips(savedProfile);
   const post = result ? panelPostOf(result, savedProfile || profile) : null;
+  const hasDeck = panelHasDeck(result);
+  const cardMealText = resultText || mealText.trim();
   const textLength = panelTextLength(mealText.trim());
   const canGenerate = textLength >= 3 && textLength <= 300 && !analyzing;
 
@@ -1615,7 +1599,10 @@ function NutritionPanel() {
         setExportDir(typeof data.exportDir === 'string' ? data.exportDir : '');
         const last = data.last && typeof data.last === 'object' ? data.last : null;
         if (last && panelMealTypes.indexOf(last.type) >= 0) setMealType(last.type);
-        if (last && typeof last.text === 'string') setMealText(last.text);
+        if (last && typeof last.text === 'string') {
+          setMealText(last.text);
+          setResultText(last.text);
+        }
         if (last && typeof last.savedPath === 'string') setSavedPath(last.savedPath);
         if (typeof data.savedPath === 'string' && data.savedPath) setSavedPath(data.savedPath);
         const nextResult = (last && last.result && typeof last.result === 'object' ? last.result : null)
@@ -1637,24 +1624,17 @@ function NutritionPanel() {
     };
   }, [reloadKey]);
 
-  /* 结果变化后画三张卡片；字体加载完再补画一次 */
+  /* 结果变化后画四页卡片；字体加载完再补画一次 */
   React.useEffect(function () {
-    if (!result) return undefined;
+    if (!hasDeck) return undefined;
     let cancelled = false;
     const draw = function () {
       if (cancelled) return;
-      // 档案还没单独保存过时，用当前表单值兜底，保证卡片页脚能拿到自媒体账号。
+      // 档案还没单独保存过时，用当前表单值兜底，保证卡片账号/身份行有内容。
       const profileForCard = Object.keys(savedProfile || {}).length > 0
         ? savedProfile
         : panelNormalizeProfile(profile);
-      const data = {
-        result: result,
-        profile: profileForCard,
-        mealType: result.mealType || mealType,
-        dateText: panelDateText(),
-        indexText: count > 0 ? '第 ' + count + ' 餐' : '',
-        handle: panelHandle(profileForCard),
-      };
+      const data = panelCardData(result, profileForCard, mealType, cardMealText, photo && photo.img);
       for (let i = 0; i < canvasRefs.length; i += 1) {
         const canvas = canvasRefs[i].current;
         if (!canvas) continue;
@@ -1663,7 +1643,7 @@ function NutritionPanel() {
         try {
           if (typeof cardDraw === 'function') cardDraw(panelCardMeta[i].kind, data, canvas);
         } catch (err) {
-          /* 单张卡片画失败不影响其余两张 */
+          /* 单张卡片画失败不影响其余几页 */
         }
       }
     };
@@ -1676,7 +1656,7 @@ function NutritionPanel() {
     return function () {
       cancelled = true;
     };
-  }, [result, savedProfile, profile, mealType, count, canvasRefs]);
+  }, [result, hasDeck, savedProfile, profile, mealType, cardMealText, photo, canvasRefs]);
 
   /* 生成后滚动到结果区（只在“刚生成”时触发，挂载回填不滚动） */
   React.useEffect(function () {
@@ -1695,6 +1675,7 @@ function NutritionPanel() {
   React.useEffect(function () {
     return function () {
       if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+      if (photoRef.current) URL.revokeObjectURL(photoRef.current.url);
     };
   }, []);
 
@@ -1723,6 +1704,69 @@ function NutritionPanel() {
     setMealText(function (prev) {
       return panelRetargetText(prev, nextType);
     });
+  };
+
+  /* ---------- 本餐照片（仅浏览器本地，不上传） ---------- */
+  const revokePhoto = function () {
+    if (photoRef.current && photoRef.current.url) URL.revokeObjectURL(photoRef.current.url);
+    photoRef.current = null;
+  };
+
+  const onPickPhotoFile = async function (file) {
+    if (!file) return;
+    if (!/^image\//.test(String(file.type || ''))) {
+      setPhotoError('请选择图片文件（JPG / PNG）');
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.src = url;
+    try {
+      await image.decode();
+    } catch (err) {
+      URL.revokeObjectURL(url);
+      setPhotoError('这张图片读不出来，换一张试试');
+      return;
+    }
+    if (!image.naturalWidth) {
+      URL.revokeObjectURL(url);
+      setPhotoError('这张图片读不出来，换一张试试');
+      return;
+    }
+    revokePhoto();
+    const next = { url: url, img: image, name: file.name || '本餐照片' };
+    photoRef.current = next;
+    setPhoto(next);
+    setPhotoError('');
+  };
+
+  const onPhotoFileChange = function (event) {
+    const input = event.target;
+    const file = input && input.files ? input.files[0] : null;
+    if (input) input.value = '';
+    if (file) onPickPhotoFile(file);
+  };
+
+  const onRemovePhoto = function () {
+    revokePhoto();
+    setPhoto(null);
+    setPhotoError('');
+  };
+
+  const onPastePhoto = function (event) {
+    const clipboard = event.clipboardData;
+    if (!clipboard || !clipboard.items) return;
+    for (let i = 0; i < clipboard.items.length; i += 1) {
+      const item = clipboard.items[i];
+      if (item.kind === 'file' && /^image\//.test(String(item.type || ''))) {
+        const file = item.getAsFile();
+        if (file) {
+          event.preventDefault();
+          onPickPhotoFile(file);
+          return;
+        }
+      }
+    }
   };
 
   const onSaveProfile = async function () {
@@ -1798,12 +1842,29 @@ function NutritionPanel() {
     setSaveError('');
     setSavedPath('');
     try {
+      // 照片只在浏览器本地解码；失败就回退成无照片版式，不影响生成。
+      if (photo && photo.url) {
+        const decoded = await panelDecodePhoto(photo);
+        if (!decoded) {
+          setPhotoError('照片读取失败，这次按无照片生成');
+          if (photoRef.current) URL.revokeObjectURL(photoRef.current.url);
+          photoRef.current = null;
+          setPhoto(null);
+        } else if (!photo.img || photo.img !== decoded) {
+          const nextPhoto = Object.assign({}, photo, { img: decoded });
+          photoRef.current = nextPhoto;
+          setPhoto(nextPhoto);
+        }
+      } else {
+        setPhotoError('');
+      }
       const data = await panelRequest('analyze', { type: mealType, text: text, profile: panelNormalizeProfile(profile) });
       const nextResult = data.result && typeof data.result === 'object' ? data.result : null;
       if (!nextResult) throw new Error('没有拿到分析结果，请重试');
       pendingScrollRef.current = true;
       setResult(nextResult);
-      // Host 在 analyze 时会把当前档案落库，这里同步一份，卡片页脚立刻有 @账号。
+      setResultText(text);
+      // Host 在 analyze 时会把当前档案落库，这里同步一份，卡片账号/身份行立刻更新。
       setSavedProfile(panelNormalizeProfile(profile));
       setNotice(typeof data.notice === 'string' ? data.notice : '');
       setFallback(data.fallback === true);
@@ -1830,7 +1891,7 @@ function NutritionPanel() {
   };
 
   const onDownloadAll = async function () {
-    if (!result || downloading) return;
+    if (!hasDeck || downloading) return;
     setDownloading(true);
     setSaveError('');
     try {
@@ -1846,7 +1907,7 @@ function NutritionPanel() {
   };
 
   const onSaveFiles = async function () {
-    if (!result || saveBusy) return;
+    if (!hasDeck || saveBusy) return;
     setSaveBusy(true);
     setSaveError('');
     try {
@@ -1860,7 +1921,7 @@ function NutritionPanel() {
           png: canvas.toDataURL('image/png'),
         });
       }
-      const texts = post && post.text ? [{ name: '04-图文文案.md', content: post.text }] : [];
+      const texts = post && post.text ? [{ name: '05-图文文案.md', content: post.text }] : [];
       const data = await panelRequest('save', { files: files, texts: texts });
       setSavedPath(typeof data.path === 'string' ? data.path : '');
     } catch (err) {
@@ -2140,6 +2201,43 @@ function NutritionPanel() {
             }, example.text);
           })
         ),
+        h('div', { className: 'nu-photo' },
+          photo ? h('img', { className: 'nu-photo-thumb', src: photo.url, alt: '本餐照片缩略图' }) : null,
+          h('div', { className: 'nu-photo-main' },
+            h('div', { className: 'nu-photo-title' }, '本餐照片（可选）'),
+            photo
+              ? h('div', { key: 'name', className: 'nu-photo-name' }, photo.name || '本餐照片')
+              : null,
+            h('div', { className: 'nu-photo-hint' }, photo
+              ? '只在这台电脑上使用，不会上传'
+              : '点选照片，或直接把照片粘贴到页面里；没有照片也能生成')
+          ),
+          h('div', { className: 'nu-photo-actions' },
+            h('input', {
+              className: 'nu-file',
+              ref: fileInputRef,
+              type: 'file',
+              accept: 'image/*',
+              'aria-label': '选择本餐照片文件',
+              onChange: onPhotoFileChange,
+            }),
+            h('button', {
+              type: 'button',
+              className: 'nu-btn nu-btn-sm',
+              'aria-label': photo ? '换一张照片' : '选择本餐照片',
+              onClick: function () {
+                if (fileInputRef.current) fileInputRef.current.click();
+              },
+            }, photo ? '换一张' : '选择照片'),
+            photo ? h('button', {
+              type: 'button',
+              className: 'nu-btn nu-btn-sm',
+              'aria-label': '移除照片',
+              onClick: onRemovePhoto,
+            }, '移除') : null
+          )
+        ),
+        photoError ? h('div', { className: 'nu-photo-error', role: 'status' }, photoError) : null,
         (analyzeError ? h('div', {
           className: 'nu-banner nu-banner-error nu-banner-form',
           role: 'alert',
@@ -2198,7 +2296,7 @@ function NutritionPanel() {
             className: 'nu-btn nu-btn-sm nu-btn-ghost nu-card-btn',
             'aria-label': meta.label,
             onClick: function () { onDownloadOne(index); },
-          }, '下载 PNG')
+          }, meta.label)
         ),
         h('div', { className: 'nu-canvas-wrap' },
           h('canvas', {
@@ -2219,12 +2317,27 @@ function NutritionPanel() {
     return h('div', { className: 'nu-empty' },
       h('div', { className: 'nu-empty-icon' }, h(PanelIcon, { size: 26 })),
       h('div', { className: 'nu-empty-title' }, count > 0 ? '已经记录 ' + count + ' 餐，再记一餐？' : '还没有生成图文'),
-      h('p', { className: 'nu-empty-desc' }, '填好个人档案，写下这一餐吃了什么，点「生成营养图文」，就会得到营养分析、改进建议、引导投稿三张 3:4 图文，外加一段可直接发布的图文文案。'),
+      h('p', { className: 'nu-empty-desc' }, '填好个人档案，写下这一餐吃了什么，点「生成营养图文」，就会得到封面、盘子、体检、改一处四张 3:4 图文，外加一段可直接发布的图文文案。'),
       h('div', { className: 'nu-empty-steps' },
         h('span', { className: 'nu-empty-step' }, h('i', null, '01'), '填档案'),
         h('span', { className: 'nu-empty-step' }, h('i', null, '02'), '记一餐'),
-        h('span', { className: 'nu-empty-step' }, h('i', null, '03'), '出三张图')
+        h('span', { className: 'nu-empty-step' }, h('i', null, '03'), '出四张图')
       )
+    );
+  };
+
+  /* 旧版结果（v1，只有三张卡片、没有 cover）：提示重新生成，不画卡片也不崩 */
+  const renderLegacy = function () {
+    return h('div', { className: 'nu-legacy', role: 'status' },
+      h('p', { className: 'nu-legacy-title' }, '这版图文是旧格式'),
+      h('p', { className: 'nu-legacy-desc' }, '重新生成一次即可看到新版四页图文（封面 / 盘子 / 体检 / 改一处）。'),
+      h('button', {
+        type: 'button',
+        className: 'nu-btn nu-btn-sm',
+        'aria-label': '重新生成图文',
+        disabled: !canGenerate,
+        onClick: onGenerate,
+      }, analyzing ? '生成中…' : '重新生成')
     );
   };
 
@@ -2248,7 +2361,7 @@ function NutritionPanel() {
       h('div', { className: 'nu-post-head' },
         h('span', { className: 'nu-post-badge' }, '文案'),
         h('span', { className: 'nu-post-title' }, '图文文案'),
-        h('span', { className: 'nu-post-hint' }, '标题 + 正文 + 备注 + 标签，可直接发布'),
+        h('span', { className: 'nu-post-hint' }, post.remark ? '标题 + 正文 + 备注 + 标签，可直接发布' : '标题 + 正文 + 标签，可直接发布'),
         h('div', { className: 'nu-post-actions' },
           h('button', {
             type: 'button',
@@ -2275,10 +2388,10 @@ function NutritionPanel() {
             return h('p', { key: index, className: 'nu-post-line' }, line);
           }))
         ),
-        h('div', { className: 'nu-post-row' },
+        post.remark ? h('div', { className: 'nu-post-row' },
           h('span', { className: 'nu-post-label' }, '备注'),
           h('p', { className: 'nu-post-text nu-post-muted', 'data-part': 'remark' }, post.remark)
-        ),
+        ) : null,
         h('div', { className: 'nu-post-row' },
           h('span', { className: 'nu-post-label' }, '标签'),
           h('p', { className: 'nu-post-text nu-post-tags', 'data-part': 'tags' }, post.tags.join(' '))
@@ -2380,7 +2493,9 @@ function NutritionPanel() {
         h('span', { className: 'nu-step' }, '05'),
         h('div', { className: 'nu-section-heading' },
           h('div', { className: 'nu-section-title' }, '图文文案'),
-          h('div', { className: 'nu-section-sub' }, '标题 + 正文（一句一行）+ 备注 + 标签，可直接发视频号')
+          h('div', { className: 'nu-section-sub' }, post && post.remark
+            ? '标题 + 正文（一句一行）+ 备注 + 标签，可直接发视频号'
+            : '标题 + 正文（一句一行）+ 标签，可直接发视频号')
         )
       ),
       h('div', { className: 'nu-section-body' }, renderPost())
@@ -2393,14 +2508,16 @@ function NutritionPanel() {
         h('span', { className: 'nu-step' }, '03'),
         h('div', { className: 'nu-section-heading' },
           h('div', { className: 'nu-section-title' }, '本餐图文'),
-          h('div', { className: 'nu-section-sub' }, result ? '三张 3:4 图文，可直接发视频号' : '生成后会显示在这里')
+          h('div', { className: 'nu-section-sub' }, hasDeck
+            ? '四张 3:4 图文，可直接发视频号'
+            : result ? '旧版结果，重新生成即可看到四页图文' : '生成后会显示在这里')
         ),
         h('div', { className: 'nu-section-tools' },
           h('button', {
             type: 'button',
             className: 'nu-btn nu-btn-sm',
             'aria-label': '保存到电脑',
-            disabled: !result || saveBusy,
+            disabled: !hasDeck || saveBusy,
             title: exportDir ? '保存到 ' + exportDir : '保存到默认目录',
             onClick: onSaveFiles,
           },
@@ -2411,7 +2528,7 @@ function NutritionPanel() {
             type: 'button',
             className: 'nu-btn nu-btn-sm',
             'aria-label': '下载全部',
-            disabled: !result || downloading,
+            disabled: !hasDeck || downloading,
             onClick: onDownloadAll,
           }, downloading ? '下载中…' : '下载全部')
         )
@@ -2424,7 +2541,9 @@ function NutritionPanel() {
         ) : null,
         analyzing && !result
           ? renderWorking()
-          : (result ? h('div', null, renderCards(), renderSavedPath()) : renderEmpty())
+          : (result
+              ? (hasDeck ? h('div', null, renderCards(), renderSavedPath()) : renderLegacy())
+              : renderEmpty())
       )
     );
   };
@@ -2442,7 +2561,7 @@ function NutritionPanel() {
     );
   }
 
-  return h('div', { className: 'nu-page' },
+  return h('div', { className: 'nu-page', onPaste: onPastePhoto },
     h('style', null, panelCss),
     renderTopbar(),
     h('div', { className: 'nu-inner' },
