@@ -1,7 +1,8 @@
 // dsh-nutrition-desk · Host 半片
 // 提供 /nutrition-desk/* 接口：个人档案持久化、当餐分析（调用 Harness 默认模型）、
-// 三张卡片 PNG 落盘到「文档/一日三餐营养师/」，以及打开文件夹。
+// 四页图文 PNG 落盘到「文档/一日三餐营养师/」，以及打开文件夹。
 import { execFile } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -264,6 +265,13 @@ function modelInfo(ctx) {
   }
 }
 
+/**
+ * 插件自己的「会话 ID」。有的 Provider（例如 opencode-go）要求请求带 session
+ * 标识，否则网关直接 400 MissingSessionID；插件不是 Agent 回合，没有会话，
+ * 所以这里给一个每进程稳定、纯 ASCII 的标识（同时用作 prompt cache 的分组键）。
+ */
+const LLM_SESSION_ID = `dsh-nutrition-desk-${randomUUID()}`
+
 async function callModel(ctx, { system, user, maxTokens = 1600, signal }) {
   const info = modelInfo(ctx)
   if (!info) throw new Error('当前没有可用模型')
@@ -278,6 +286,7 @@ async function callModel(ctx, { system, user, maxTokens = 1600, signal }) {
       ...call.config,
       system,
       messages: [{ role: 'user', content: [{ type: 'text', text: user }], source: { kind: 'dsh-nutrition-desk' } }],
+      sessionId: LLM_SESSION_ID,
       signal,
     })) {
       if (chunk.type === 'text-delta') out += chunk.text

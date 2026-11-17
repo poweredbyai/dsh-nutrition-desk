@@ -219,6 +219,9 @@ test('POST analyze 产出四页结构：封面/盘子/体检/改一处/文案', 
   assert.deepEqual(r.post.tags, ['#AI说餐谱', '#早餐', '#上班族', '#久坐族'])
   assert.ok(!r.post.text.includes('备注'))
   assert.ok(r.post.text.includes('#AI说餐谱'))
+  // 请求必须带 sessionId（opencode-go 等 Provider 缺了会 400 MissingSessionID）
+  assert.equal(typeof seen.sessionId, 'string')
+  assert.ok(seen.sessionId.length > 0)
   // 提示词带上本餐参考
   assert.match(seen.system, /四页图文/)
   assert.match(seen.messages[0].content[0].text, /本餐参考/)
