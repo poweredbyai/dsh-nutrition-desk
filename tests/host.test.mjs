@@ -191,9 +191,9 @@ test('POST analyze 产出四页结构：封面/盘子/体检/改一处/文案', 
   // 盘子：mine 归一到 100，guide 固定三项
   assert.ok(r.plate.mine.reduce((sum, row) => sum + row.pct, 0) === 100)
   assert.deepEqual(r.plate.guide, [
-    { label: '菜', pct: 50, tone: 'veg' },
-    { label: '谷薯', pct: 25, tone: 'carb' },
-    { label: '蛋白', pct: 25, tone: 'protein' },
+    { label: '菜', pct: 40, tone: 'veg' },
+    { label: '谷薯', pct: 30, tone: 'carb' },
+    { label: '蛋白', pct: 30, tone: 'protein' },
   ])
   // 体检：三行；建议值和状态由 Host 算
   assert.equal(r.exam.rows.length, 3)
@@ -202,7 +202,9 @@ test('POST analyze 产出四页结构：封面/盘子/体检/改一处/文案', 
   assert.equal(protein.value, 12)
   assert.equal(protein.tone, 'mid')
   assert.equal(protein.status, '差一点')
-  assert.match(protein.target[1], /全天 80g 的三分之一/)
+  assert.deepEqual(protein.target, ['建议 27g', '全天 80g'])
+  assert.deepEqual(veg.target, ['建议 100g', '全天 300g+'])
+  assert.deepEqual(grain.target, ['建议 20g', '全天 50g+'])
   assert.equal(veg.tone, 'low')
   assert.equal(veg.status, '空的')
   assert.equal(veg.percent, 0)

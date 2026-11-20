@@ -277,8 +277,8 @@ function cardCover(ctx, img, x, y, w, h, focusY, radius) {
 /* ---------------- 页头 / 页脚 ---------------- */
 
 function cardKicker(ctx, head, tail) {
-  var adv = cardDrawStr(ctx, head, cardPad, 102, 23, 700, cardGreen, 4.6, 'left')
-  cardDrawStr(ctx, ' · ' + cardStr(tail), cardPad + adv - 4.6, 102, 23, 400, cardMuted, 4.6, 'left')
+  var adv = cardDrawStr(ctx, head, cardPad, 104, 25, 700, cardGreen, 4.8, 'left')
+  cardDrawStr(ctx, ' · ' + cardStr(tail), cardPad + adv - 4.8, 104, 25, 400, cardMuted, 4.8, 'left')
 }
 
 /* ttl：从 sizes 里挑第一个能排进 maxW、≤2 行且不截断的字号 */
@@ -315,18 +315,14 @@ function cardPager(ctx, text) {
   cardDrawStr(ctx, text, cardRight - 17, 1383, 20, 400, cardInk2, 0, 'right')
 }
 
-function cardFoot(ctx, account) {
-  cardDrawStr(ctx, cardStr(account), cardPad, 1384, 22, 400, cardMuted, 0.44, 'left')
-}
-
 /* 提示条：浅绿底 + 左侧绿边（P2 / P3 共用），返回高度 */
 function cardInsightBox(ctx, top, text, bold, emphColor) {
   var padY = 28
   var textX = cardPad + 4 + 32
   var lay = cardPara(ctx, {
-    text: text, size: 31, weight: 400, color: cardInk2,
+    text: text, size: 34, weight: 400, color: cardInk2,
     emphasis: bold, emphColor: emphColor || cardInk, emphWeight: 700,
-    maxW: cardRight - textX - 32, maxLines: 3, lh: 49.6
+    maxW: cardRight - textX - 32, maxLines: 3, lh: 54.4
   })
   var h = padY * 2 + lay.height
   ctx.save()
@@ -448,7 +444,6 @@ function cardDrawP1(ctx, data) {
   }
 
   cardDrawStr(ctx, cardStr(data.profileLine), cardPad, 1388, 22, 400, cardMuted, 0.88, 'left')
-  cardDrawStr(ctx, cardStr(data.account), cardRight, 1388, 22, 700, cardInk2, 0, 'right')
 }
 
 /* ---------------- P2 盘子 ---------------- */
@@ -519,7 +514,7 @@ function cardDrawP2(ctx, data) {
   var plate = data.plate || {}
 
   cardKicker(ctx, '盘子', '我吃的 vs 一餐该有的')
-  var ttl = cardTtlLayout(ctx, cardStr(plate.title), [58, 53, 50], cardInnerW)
+  var ttl = cardTtlLayout(ctx, cardStr(plate.title), [64, 58, 54], cardInnerW)
   var ttlBottom = cardTtlDraw(ctx, ttl, 130.5)
 
   var hasPhoto = cardHasPhoto(data)
@@ -540,24 +535,23 @@ function cardDrawP2(ctx, data) {
   cardRing(ctx, colL, cy, plate.mine)
   cardRing(ctx, colR, cy, plate.guide)
 
-  cardDrawStr(ctx, '我这一餐', colL, capTop + 40.5, 36, 700, cardInk, 0, 'center')
-  cardDrawStr(ctx, '一餐该有的', colR, capTop + 40.5, 36, 700, cardInk, 0, 'center')
-  cardDrawStr(ctx, cardSegsCaption(plate.mine), colL, capTop + 85.75, 22, 400, cardMuted, 0, 'center')
-  cardDrawStr(ctx, cardSegsCaption(plate.guide), colR, capTop + 85.75, 22, 400, cardMuted, 0, 'center')
+  cardDrawStr(ctx, '我这一餐', colL, capTop + 45, 40, 700, cardInk, 0, 'center')
+  cardDrawStr(ctx, '一餐该有的', colR, capTop + 45, 40, 700, cardInk, 0, 'center')
+  cardDrawStr(ctx, cardSegsCaption(plate.mine), colL, capTop + 95, 24, 400, cardMuted, 0, 'center')
+  cardDrawStr(ctx, cardSegsCaption(plate.guide), colR, capTop + 95, 24, 400, cardMuted, 0, 'center')
 
   var insight = plate.insight || {}
-  cardInsightBox(ctx, capTop + 91 + 40, cardStr(insight.text), cardStr(insight.bold), cardInk)
+  cardInsightBox(ctx, capTop + 101 + 40, cardStr(insight.text), cardStr(insight.bold), cardInk)
 
   var note = cardStr(plate.note).trim()
   if (note) {
     var nlay = cardPara(ctx, {
-      text: note, size: 23, weight: 400, color: cardMuted,
-      maxW: cardInnerW, maxLines: 2, lh: 39.1
+      text: note, size: 24, weight: 400, color: cardMuted,
+      maxW: cardInnerW, maxLines: 2, lh: 40.8
     })
     cardDrawPara(ctx, nlay, cardPad, 1328 - nlay.height)
   }
 
-  cardFoot(ctx, data.account)
   cardPager(ctx, '2 / 4')
 }
 
@@ -576,59 +570,67 @@ function cardExamTargetLines(row) {
   return s ? s.split('\n').slice(0, 2) : []
 }
 
-function cardExamRowHeight(row, isLast) {
-  var count = Math.max(1, cardExamTargetLines(row).length)
-  var lnH = 80.16 + Math.max(8.16, 27.13 + (count - 1) * 36)
-  return 26 + lnH + 18 + 9 + 26 + (isLast ? 0 : 1)
+/* 建议值只占一行：数字放大后三行内容要更紧凑，两行会顶到人话卡 */
+function cardExamTargetLine(row) {
+  var lines = cardExamTargetLines(row).map(function (line) { return cardStr(line).trim(); }).filter(Boolean)
+  return lines.join(' · ')
+}
+
+var cardExamRowH = 190
+
+function cardExamRowHeight() {
+  return cardExamRowH
 }
 
 function cardExamRowDraw(ctx, row, top, isLast) {
   var tone = cardExamTone(row.tone)
-  var baseline = top + 106
+  var baseline = top + 112
 
-  cardDrawStr(ctx, cardStr(row.label).trim(), cardPad, baseline, 31, 700, cardInk, 0, 'left')
+  cardDrawStr(ctx, cardStr(row.label).trim(), cardPad, baseline, 34, 700, cardInk, 0, 'left')
 
   var numStr = cardStr(row.value)
-  cardDrawStr(ctx, numStr, 236, baseline, 96, 700, tone.fg, -2.88, 'left')
-  var numW = cardMeasure(ctx, numStr, -2.88)
+  cardDrawStr(ctx, numStr, 236, baseline, 100, 700, tone.fg, -3, 'left')
+  var numW = cardMeasure(ctx, numStr, -3)
   var unit = cardStr(row.unit).trim()
-  if (unit) cardDrawStr(ctx, unit, 236 + numW + 5, baseline, 32, 500, cardInk2, 0, 'left')
+  if (unit) cardDrawStr(ctx, unit, 236 + numW + 6, baseline, 35, 500, cardInk2, 0, 'left')
 
   var stText = cardStr(row.status).trim()
   if (stText) {
-    cardSetFont(ctx, 25, 700)
+    cardSetFont(ctx, 27, 700)
     var stW = ctx.measureText(stText).width
-    var pillW = stW + 36
-    var pillTop = baseline - 34.1
+    var pillW = stW + 40
+    var pillTop = baseline - 37
     ctx.save()
     ctx.fillStyle = tone.pill
-    cardRoundRect(ctx, 498, pillTop, pillW, 50, 999)
+    cardRoundRect(ctx, 498, pillTop, pillW, 54, 999)
     ctx.fill()
     ctx.restore()
-    cardDrawStr(ctx, stText, 498 + 18, baseline, 25, 700, tone.fg, 0, 'left')
+    cardDrawStr(ctx, stText, 498 + 20, baseline, 27, 700, tone.fg, 0, 'left')
   }
 
-  var tgtLines = cardExamTargetLines(row)
-  for (var t = 0; t < tgtLines.length; t++) {
-    cardDrawStr(ctx, tgtLines[t], cardRight, baseline + t * 36, 24, 400, cardMuted, 0, 'right')
+  var tgt = cardExamTargetLine(row)
+  if (tgt) {
+    var tgtLay = cardPara(ctx, {
+      text: tgt, size: 26, weight: 400, color: cardMuted,
+      maxW: cardRight - 618, maxLines: 1, lh: 36
+    })
+    cardDrawPara(ctx, tgtLay, cardRight, top + 66, 'right')
   }
 
-  var count = Math.max(1, tgtLines.length)
-  var lnH = 80.16 + Math.max(8.16, 27.13 + (count - 1) * 36)
-  var barY = top + 26 + lnH + 18
+  var barY = top + 152
   ctx.save()
   ctx.fillStyle = tone.bar
-  cardRoundRect(ctx, cardPad, barY, cardInnerW, 9, 999)
+  cardRoundRect(ctx, cardPad, barY, cardInnerW, 10, 999)
   ctx.fill()
   var pct = cardClamp(Number(row.percent) || 0, 0, 100)
   if (pct > 0) {
     ctx.fillStyle = tone.fg
-    cardRoundRect(ctx, cardPad, barY, cardInnerW * pct / 100, 9, 999)
+    cardRoundRect(ctx, cardPad, barY, cardInnerW * pct / 100, 10, 999)
     ctx.fill()
   }
   ctx.restore()
 
-  var h = 26 + lnH + 18 + 9 + 26 + (isLast ? 0 : 1)
+  var h = cardExamRowH + (isLast ? 0 : 1)
   if (!isLast) {
     ctx.fillStyle = cardLine2
     ctx.fillRect(cardPad, top + h - 1, cardInnerW, 1)
@@ -640,9 +642,9 @@ function cardSayLayout(ctx, exam, hasPhoto) {
   var say = exam.say || {}
   var textW = hasPhoto ? 786 : cardW - 144
   var lay = cardPara(ctx, {
-    text: cardStr(say.text), size: 30, weight: 400, color: cardInk2,
+    text: cardStr(say.text), size: 33, weight: 400, color: cardInk2,
     emphasis: cardStr(say.bold), emphColor: cardInk, emphWeight: 700,
-    maxW: textW, maxLines: 3, lh: 48
+    maxW: textW, maxLines: 3, lh: 52.8
   })
   var h = hasPhoto ? 27 * 2 + Math.max(210, lay.height) + 2 : 34 * 2 + lay.height + 2
   return { lay: lay, h: h, top: 1328 - h, photo: hasPhoto }
@@ -679,7 +681,7 @@ function cardDrawP3(ctx, data) {
   cardKicker(ctx, '体检', '三个数字看这一餐')
 
   var sayTop = cardSayLayout(ctx, exam, hasPhoto).top
-  var sizes = [58, 53, 50]
+  var sizes = [64, 58, 54]
   var chosen = null
   var si
   for (si = 0; si < sizes.length; si++) {
@@ -691,8 +693,8 @@ function cardDrawP3(ctx, data) {
     for (r = 0; r < rows.length; r++) acc += cardExamRowHeight(rows[r], r === rows.length - 1)
     var insTop = acc + 40
     var insLay = cardPara(ctx, {
-      text: cardStr(exam.insight), size: 31, weight: 400, color: cardInk2,
-      maxW: cardRight - (cardPad + 4 + 32) - 32, maxLines: 3, lh: 49.6
+      text: cardStr(exam.insight), size: 34, weight: 400, color: cardInk2,
+      maxW: cardRight - (cardPad + 4 + 32) - 32, maxLines: 3, lh: 54.4
     })
     if (insTop + 56 + insLay.height <= sayTop - 20) {
       chosen = { ttl: ttl, top: start, insTop: insTop }
@@ -700,7 +702,7 @@ function cardDrawP3(ctx, data) {
     }
   }
   if (!chosen) {
-    var ttlF = cardTtlLayout(ctx, cardStr(exam.title), [50], cardInnerW)
+    var ttlF = cardTtlLayout(ctx, cardStr(exam.title), [54], cardInnerW)
     var startF = 130.5 + ttlF.lay.height + 36
     var accF = startF
     var rf
@@ -715,7 +717,6 @@ function cardDrawP3(ctx, data) {
   }
   cardInsightBox(ctx, chosen.insTop, cardStr(exam.insight), '', cardInk)
   cardSayDraw(ctx, data, exam, hasPhoto)
-  cardFoot(ctx, data.account)
   cardPager(ctx, '3 / 4')
 }
 
@@ -751,18 +752,18 @@ function cardDrawP4(ctx, data) {
   var ask = fix.ask || {}
 
   cardKicker(ctx, '改一处', '明天的' + cardStr(data.mealType || '这一餐'))
-  var ttl = cardTtlLayout(ctx, cardStr(fix.title), [58, 53, 50], cardInnerW)
+  var ttl = cardTtlLayout(ctx, cardStr(fix.title), [64, 58, 54], cardInnerW)
   var ttlBottom = cardTtlDraw(ctx, ttl, 130.5)
 
   /* 底部三块从底往上量：CTA 固定，提问卡贴底 112 */
   var qLay = cardPara(ctx, {
-    text: cardStr(ask.q), size: 32, weight: 700, color: cardInk,
-    maxW: cardW - 144, maxLines: 2, lh: 48
+    text: cardStr(ask.q), size: 34, weight: 700, color: cardInk,
+    maxW: cardW - 144, maxLines: 2, lh: 51
   })
   var optTexts = Array.isArray(ask.options) ? ask.options.slice(0, 2).map(cardStr) : []
-  var optH = optTexts.length ? 60 : 0
+  var optH = optTexts.length ? 62 : 0
   var hintText = cardStr(ask.hint).trim()
-  var hintH = hintText ? 23 * 1.5 : 0
+  var hintH = hintText ? 25 * 1.5 : 0
   var askH = 30 + qLay.height + (optTexts.length ? 18 + optH : 0) + (hintText ? 16 + hintH : 0) + 30
   var askTop = 1328 - askH
 
@@ -770,29 +771,30 @@ function cardDrawP4(ctx, data) {
   var whyLay = null
   var rowTops = []
   var rowsTop = ttlBottom + 38
-  var wanted = rowsTop + rows.length * 169 + 60
+  var rowH = 176
+  var wanted = rowsTop + rows.length * rowH + 56
 
   /* why */
   var why = fix.why || {}
-  var whyTop = rowsTop + rows.length * 169 + 60
+  var whyTop = rowsTop + rows.length * rowH + 56
   whyLay = cardPara(ctx, {
-    text: cardStr(why.text), size: 29, weight: 400, color: cardMuted,
+    text: cardStr(why.text), size: 32, weight: 400, color: cardMuted,
     emphasis: cardStr(why.bold), emphColor: cardInk2, emphWeight: 700,
-    maxW: cardInnerW - 23, maxLines: 2, lh: 46.98
+    maxW: cardInnerW - 23, maxLines: 2, lh: 51.8
   })
   var faqTop = whyTop + whyLay.height + 46
   var faq = fix.faq || {}
   var qText = cardStr(faq.q).trim()
   var aText = cardStr(faq.a && faq.a.text !== undefined ? faq.a.text : faq.a)
-  cardSetFont(ctx, 26, 700)
+  cardSetFont(ctx, 28, 700)
   var qW = qText ? ctx.measureText(qText).width : 0
   var aX = cardPad + qW + (qText ? 18 : 0)
   faqLay = cardPara(ctx, {
-    text: aText, size: 26, weight: 400, color: cardInk2,
+    text: aText, size: 28, weight: 400, color: cardInk2,
     emphasis: cardStr(faq.a && faq.a.bold), emphColor: cardGreen, emphWeight: 700,
-    maxW: cardRight - aX, maxLines: 2, lh: 39
+    maxW: cardRight - aX, maxLines: 2, lh: 42
   })
-  var faqH = Math.max(39, faqLay.height)
+  var faqH = Math.max(42, faqLay.height)
 
   /* 建议行 */
   var y = rowsTop
@@ -800,23 +802,23 @@ function cardDrawP4(ctx, data) {
   for (i = 0; i < rows.length; i++) {
     var row = rows[i] || {}
     var isLast = i === rows.length - 1
-    var rowH = 168 + (isLast ? 0 : 1)
+    var rowH = 175 + (isLast ? 0 : 1)
     rowTops.push(y)
 
     /* 序号块 */
     var noText = cardStr(row.no).trim() || ('0' + (i + 1)).slice(-2)
     ctx.save()
     ctx.fillStyle = row.strong ? cardGreen : '#C8BCAB'
-    cardRoundRect(ctx, cardPad, y + 58, 52, 52, 12)
+    cardRoundRect(ctx, cardPad, y + 58, 54, 54, 12)
     ctx.fill()
     ctx.restore()
-    cardDrawStr(ctx, noText, cardPad + 26, y + 58 + 34.6, 23, 700, cardWhite, 0, 'center')
+    cardDrawStr(ctx, noText, cardPad + 27, y + 58 + 35.6, 24, 700, cardWhite, 0, 'center')
 
     /* 右侧结果 */
     var rsParts = cardResultParts(row.result)
     var rsLay = []
     var rsW = 0
-    var rsSize = 26
+    var rsSize = 28
     var part
     for (var k = 0; k < rsParts.length; k++) {
       cardSetFont(ctx, rsSize, rsParts[k].green ? 700 : 400)
@@ -834,13 +836,13 @@ function cardDrawP4(ctx, data) {
     /* 主文：40px，放不下缩到 34 再截断 */
     var titleMax = cardRight - 146 - 22 - rsW
     var titleLay = cardPara(ctx, {
-      text: cardStr(row.title), size: 40, weight: 700, color: cardInk,
-      maxW: titleMax, maxLines: 1, lh: 50, ls: -0.4
+      text: cardStr(row.title), size: 43, weight: 700, color: cardInk,
+      maxW: titleMax, maxLines: 1, lh: 54, ls: -0.43
     })
     if (cardTruncated(titleLay)) {
       titleLay = cardPara(ctx, {
-        text: cardStr(row.title), size: 34, weight: 700, color: cardInk,
-        maxW: titleMax, maxLines: 1, lh: 42.5, ls: -0.34
+        text: cardStr(row.title), size: 36, weight: 700, color: cardInk,
+        maxW: titleMax, maxLines: 1, lh: 45, ls: -0.36
       })
     }
     cardDrawPara(ctx, titleLay, 146, y + 59)
@@ -859,7 +861,7 @@ function cardDrawP4(ctx, data) {
   cardDrawPara(ctx, whyLay, cardPad + 23, whyTop)
 
   /* FAQ */
-  if (qText) cardDrawStr(ctx, qText, cardPad, cardBase(faqTop, 26, 39), 26, 700, cardInk, 0, 'left')
+  if (qText) cardDrawStr(ctx, qText, cardPad, cardBase(faqTop, 28, 42), 28, 700, cardInk, 0, 'left')
   cardDrawPara(ctx, faqLay, aX, faqTop)
 
   /* 提问卡（整幅贴底） */
@@ -874,33 +876,30 @@ function cardDrawP4(ctx, data) {
     ay += 18
     var ox = cardPad
     for (i = 0; i < optTexts.length; i++) {
-      cardSetFont(ctx, 25, 400)
+      cardSetFont(ctx, 27, 400)
       var tw = ctx.measureText(optTexts[i]).width
-      var pw = tw + 44
+      var pw = tw + 46
       ctx.save()
       ctx.fillStyle = cardWhite
-      cardRoundRect(ctx, ox, ay, pw, 60, 999)
+      cardRoundRect(ctx, ox, ay, pw, 62, 999)
       ctx.fill()
       ctx.strokeStyle = cardLine
       ctx.lineWidth = 1
-      cardRoundRect(ctx, ox + 0.5, ay + 0.5, pw - 1, 59, 999)
+      cardRoundRect(ctx, ox + 0.5, ay + 0.5, pw - 1, 61, 999)
       ctx.stroke()
       ctx.restore()
-      cardDrawStr(ctx, optTexts[i], ox + 22, ay + 38.1, 25, 400, cardInk2, 0, 'left')
+      cardDrawStr(ctx, optTexts[i], ox + 23, ay + 40, 27, 400, cardInk2, 0, 'left')
       ox += pw + 14
     }
-    ay += 60
+    ay += 62
   }
   if (hintText) {
     ay += 16
-    cardDrawStr(ctx, hintText, cardPad, cardBase(ay, 23, 34.5), 23, 400, cardMuted, 0, 'left')
+    cardDrawStr(ctx, hintText, cardPad, cardBase(ay, 25, 37.5), 25, 400, cardMuted, 0, 'left')
   }
 
-  /* CTA 页脚 */
-  var ctaY = 1384
-  var cx = cardDrawStr(ctx, '关注 ', cardPad, ctaY, 25, 400, cardMuted, 0, 'left')
-  cx += cardDrawStr(ctx, cardStr(data.account), cx, ctaY, 25, 700, cardInk, 0, 'left')
-  cardDrawStr(ctx, '，每天只改一处', cx, ctaY, 25, 400, cardMuted, 0, 'left')
+  /* CTA 页脚：只留一句口号，不再印账号 */
+  cardDrawStr(ctx, '每天只改一处', cardPad, 1384, 26, 400, cardMuted, 0, 'left')
   cardPager(ctx, '4 / 4')
 }
 

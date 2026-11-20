@@ -327,14 +327,14 @@ const SYSTEM_PROMPT = `你是「三餐营养师」，注册营养师，帮用户
   "cover": {
     "lines": ["第一行，≤9 个字", "第二行，≤9 个字"],
     "emphasis": "两行里要标红的那一小段原文，必须和某一行一字不差，≤8 个字",
-    "sub": ["第一句：表态，≤13 字", "第二句：给代价，≤13 字"]
+    "sub": ["第一句：表态，≤12 字", "第二句：给代价，≤12 字"]
   },
   "plate": {
     "title": "≤10 字，一句判断，不要问句，不要铺垫",
     "mine": [
       { "label": "≤4 字，如 米饭 / 蛋白 / 菜", "pct": 整数, "tone": "carb|protein|veg" }
     ],
-    "insight": { "text": "≤20 字，一句话点破差在哪", "bold": "其中要加粗的那一小段原文" }
+    "insight": { "text": "≤18 字，一句话点破差在哪", "bold": "其中要加粗的那一小段原文" }
   },
   "exam": {
     "title": "≤10 字，一句判断",
@@ -344,7 +344,7 @@ const SYSTEM_PROMPT = `你是「三餐营养师」，注册营养师，帮用户
       { "label": "全谷物", "value": 整数克 }
     ],
     "insight": "≤14 字，一行说完",
-    "say": { "text": "≤40 字，一句人话，讲体感（心慌、饿、困），不讲术语", "bold": "其中要加粗的那一小段原文" }
+    "say": { "text": "≤34 字，一句人话，讲体感（心慌、饿、困），不讲术语", "bold": "其中要加粗的那一小段原文" }
   },
   "fix": {
     "title": "≤12 字，只写主动作，不要「就够了」这种尾巴",
@@ -353,10 +353,10 @@ const SYSTEM_PROMPT = `你是「三餐营养师」，注册营养师，帮用户
       { "title": "第二条动作", "result": "第二条的数字变化，没数字就给一句结论" },
       { "title": "第三条动作", "result": "第三条的结果" }
     ],
-    "why": { "text": "≤24 字，表态：不让你戒，只让你配", "bold": "其中要加粗的那一小段原文" },
-    "faq": { "q": "≤10 字，预判一个反驳", "a": { "text": "≤16 字，给替代方案", "bold": "其中要加粗的食物或数字" } },
+    "why": { "text": "≤20 字，表态：不让你戒，只让你配", "bold": "其中要加粗的那一小段原文" },
+    "faq": { "q": "≤10 字，预判一个反驳", "a": { "text": "≤14 字，给替代方案", "bold": "其中要加粗的食物或数字" } },
     "ask": {
-      "q": "≤26 字，二选一的问题",
+      "q": "≤22 字，二选一的问题",
       "options": ["① ≤8 字", "② ≤8 字"],
       "hint": "一句话，如「评论区说一声。」"
     }
@@ -426,10 +426,12 @@ function normalizePie(list) {
   return rows.map((row, i) => ({ label: row.label, pct: out[i], tone: row.tone }))
 }
 
+// 《中国居民膳食指南（2022）》平衡膳食餐盘：蔬菜与水果合计算一半，谷薯类多于鱼禽蛋豆。
+// 一餐往往不吃水果，所以这里把蔬菜记为四成，谷薯和蛋白各三成（蛋白三成也照顾到中老年 1.0–1.2 g/kg 的需要）。
 const GUIDE_PIE = [
-  { label: '菜', pct: 50, tone: 'veg' },
-  { label: '谷薯', pct: 25, tone: 'carb' },
-  { label: '蛋白', pct: 25, tone: 'protein' },
+  { label: '菜', pct: 40, tone: 'veg' },
+  { label: '谷薯', pct: 30, tone: 'carb' },
+  { label: '蛋白', pct: 30, tone: 'protein' },
 ]
 
 const EXAM_LABELS = ['蛋白质', '蔬菜', '全谷物']
@@ -438,10 +440,11 @@ const EXAM_LABELS = ['蛋白质', '蔬菜', '全谷物']
 function examRows(values, targets) {
   const dailyProtein = Math.max(1, targets.daily.protein)
   const suggest = [Math.max(10, Math.round(dailyProtein / 3)), 100, 20]
+  // 建议值压成一行短句（字大了放不下两行）
   const targetsText = [
-    [`一餐建议 ${suggest[0]}g`, `全天 ${dailyProtein}g 的三分之一`],
-    ['一餐建议 100g', '全天 300–500g'],
-    ['一餐建议 20g', '全天 50–150g'],
+    [`建议 ${suggest[0]}g`, `全天 ${dailyProtein}g`],
+    ['建议 100g', '全天 300g+'],
+    ['建议 20g', '全天 50g+'],
   ]
   return EXAM_LABELS.map((label, i) => {
     const value = int(Array.isArray(values) ? values[i] : 0, 0, 2000, 0)
@@ -561,14 +564,14 @@ function normalizeResult(raw, { profile, mealType, mealText }) {
   // 强调片段必须落在某一行里（卡片按行上色），跨行或不存在的直接丢掉
   const emphasis = emphasisRaw && coverLines.some(line => line.includes(emphasisRaw)) ? emphasisRaw : ''
   const coverSub = (Array.isArray(coverIn.sub) ? coverIn.sub : [])
-    .map(line => sentence(line, 14))
+    .map(line => sentence(line, 12))
     .filter(Boolean)
     .slice(0, 2)
   while (coverSub.length < 2) coverSub.push(coverSub.length === 0 ? '先看清吃了什么。' : '再决定加什么。')
 
   /* ---- 盘子 ---- */
   const plateTitle = text(plateIn.title, 11) || '结构偏了一边'
-  const plateInsight = boldBox(plateIn.insight, 21, 20)
+  const plateInsight = boldBox(plateIn.insight, 18, 17)
   if (!plateInsight.text) {
     plateInsight.text = '这一餐少了最该有的那一块。'
     plateInsight.bold = '最该有的那一块'
@@ -583,7 +586,7 @@ function normalizeResult(raw, { profile, mealType, mealText }) {
   const exam = examRows(examValues, targets)
   const examTitle = text(examIn.title, 11) || (exam.filter(row => row.tone === 'low').length >= 2 ? '三样里，两样是零' : '三个数字看这一餐')
   const examInsight = text(examIn.insight, 15) || '热量没超，材料没给。'
-  const examSay = boldBox(examIn.say, 42, 34)
+  const examSay = boldBox(examIn.say, 34, 28)
   if (!examSay.text) {
     examSay.text = '吃得快、掉得也快。十点心慌，不是饿，是结构不对。'
     examSay.bold = '十点心慌，不是饿，是结构不对。'
@@ -592,7 +595,7 @@ function normalizeResult(raw, { profile, mealType, mealText }) {
   /* ---- 改一处 ---- */
   const fixTitle = text(fixIn.title, 13) || '加一份蛋白、一份菜'
   const rows = fixRows(fixIn.rows)
-  const why = boldBox(fixIn.why, 25, 20)
+  const why = boldBox(fixIn.why, 20, 17)
   if (!why.text) {
     why.text = '不用戒，一天一次就好。改的是结构，不是口味。'
     why.bold = '改的是结构，不是口味。'
@@ -600,7 +603,7 @@ function normalizeResult(raw, { profile, mealType, mealText }) {
   const faqIn = isObject(fixIn.faq) ? fixIn.faq : {}
   const faq = {
     q: text(faqIn.q, 11) || '不爱吃这些？',
-    a: boldBox(faqIn.a, 17, 14),
+    a: boldBox(faqIn.a, 14, 12),
   }
   if (!faq.a.text) {
     faq.a.text = '换成你常吃的那一种，量一样就行。'
@@ -613,7 +616,7 @@ function normalizeResult(raw, { profile, mealType, mealText }) {
     .slice(0, 2)
   while (askOptions.length < 2) askOptions.push(askOptions.length === 0 ? '① 只有主食' : '② 主食＋蛋白')
   const ask = {
-    q: text(askIn.q, 27) || `你的${mealType}是「只有主食」，还是「主食＋蛋白」？`,
+    q: text(askIn.q, 22) || `你的${mealType}是「只有主食」，还是「主食＋蛋白」？`,
     options: askOptions,
     hint: text(askIn.hint, 13) || '评论区说一声。',
   }
@@ -650,7 +653,7 @@ function normalizeResult(raw, { profile, mealType, mealText }) {
       mine: normalizePie(plateIn.mine),
       guide: GUIDE_PIE,
       insight: plateInsight,
-      note: text(plateIn.note, 90) || '口径：比例按食材重量估算；「蔬菜约占一餐一半」出自《中国居民膳食指南（2022）》。数据为估算值。',
+      note: text(plateIn.note, 80) || '口径：按食材重量估算；参考《中国居民膳食指南（2022）》餐盘：蔬菜水果合半、谷薯多于鱼肉蛋豆。数据为估算值。',
     },
     exam: { title: examTitle, rows: exam, insight: examInsight, say: examSay },
     fix: { title: fixTitle, rows, why, faq, ask },
