@@ -370,6 +370,7 @@ const SYSTEM_PROMPT = `你是「三餐营养师」，注册营养师，帮用户
 写法要求：
 - cover 的公式是「什么食物 + 哪个数字不对」，两行拼起来 ≤16 字，必须出现数字；emphasis 就是这个数字那一小段（会被标红）。
 - 一餐只讲一个主要矛盾。exam 三行固定 蛋白质 / 蔬菜 / 全谷物，值写克数（整数，没有就写 0），不要编造超出常识的数字。
+- 三餐的重点不一样：早餐优先讲蛋白质（中老年早餐最容易缺蛋白），午餐优先讲蔬菜够不够半盘，晚餐优先讲清淡和补足白天缺的蔬菜。专业上「蔬菜水果约占一餐一半」是单餐的参考比例，不是每餐硬指标，别把它写成硬性规定。
 - plate.mine 是这一餐按食材重量估算的结构，1 到 3 项，合计 100；有菜就用 tone「veg」，主食「carb」，肉蛋奶豆「protein」。
 - fix 三条必须能当天做到，给具体食物和份量；第一条是最重要的那个改动。
 - caption 用短句、口语，像朋友分享自己的这一餐；不要写「备注：男、42 岁…」这种档案行（身份已经在封面左下角）。
@@ -433,6 +434,18 @@ const GUIDE_PIE = [
   { label: '谷薯', pct: 30, tone: 'carb' },
   { label: '蛋白', pct: 30, tone: 'protein' },
 ]
+
+/**
+ * 每餐的口径说明。《中国居民膳食指南（2022）》要求「餐餐有蔬菜」，蔬果半盘是单餐的
+ * 平均目标而不是硬指标；落到三餐侧重点不同：早餐容易缺蛋白、午餐最容易做到半盘、
+ * 晚餐按白天缺口补。
+ */
+const MEAL_NOTES = {
+  早餐: '口径：按食材重量估算；早餐也应有蔬果，做不到就用一小份蔬菜或水果补，蛋白质更要盯住。参考《中国居民膳食指南（2022）》。数据为估算值。',
+  午餐: '口径：按食材重量估算；午餐最容易做到蔬菜水果占一半。参考《中国居民膳食指南（2022）》餐盘。数据为估算值。',
+  晚餐: '口径：按食材重量估算；晚餐清淡少油，蔬菜按白天没吃够的量补。参考《中国居民膳食指南（2022）》餐盘。数据为估算值。',
+  加餐: '口径：按食材重量估算；加餐不算正餐，按全天总量看就行。数据为估算值。',
+}
 
 const EXAM_LABELS = ['蛋白质', '蔬菜', '全谷物']
 
@@ -548,6 +561,7 @@ function postTags(profile, mealType) {
 function normalizeResult(raw, { profile, mealType, mealText }) {
   const targets = nutritionTargets(profile, mealType)
   const data = isObject(raw) ? raw : {}
+  const mealNote = MEAL_NOTES[mealType] || MEAL_NOTES['午餐']
   const coverIn = isObject(data.cover) ? data.cover : {}
   const plateIn = isObject(data.plate) ? data.plate : {}
   const examIn = isObject(data.exam) ? data.exam : {}
@@ -653,7 +667,7 @@ function normalizeResult(raw, { profile, mealType, mealText }) {
       mine: normalizePie(plateIn.mine),
       guide: GUIDE_PIE,
       insight: plateInsight,
-      note: text(plateIn.note, 80) || '口径：按食材重量估算；参考《中国居民膳食指南（2022）》餐盘：蔬菜水果合半、谷薯多于鱼肉蛋豆。数据为估算值。',
+      note: text(plateIn.note, 80) || mealNote,
     },
     exam: { title: examTitle, rows: exam, insight: examInsight, say: examSay },
     fix: { title: fixTitle, rows, why, faq, ask },
@@ -826,7 +840,9 @@ function fallbackResult({ profile, mealType, mealText }) {
         { label: '蔬菜', value: vegG },
         { label: '全谷物', value: grainG },
       ],
-      insight: vegG === 0 ? '热量没超，材料没给。' : '热量够用，结构偏了。',
+      insight: mealType === '早餐'
+        ? (proteinRatio < 0.8 ? '早餐最该补的是蛋白' : '蛋白够了，菜还差一点')
+        : vegG === 0 ? '热量没超，材料没给。' : '热量够用，结构偏了。',
       say: {
         text: `${matched.length ? matched[0] : '这一餐'}升得快、掉得也快。十点心慌，不是饿，是结构不对。`,
         bold: '十点心慌，不是饿，是结构不对。',

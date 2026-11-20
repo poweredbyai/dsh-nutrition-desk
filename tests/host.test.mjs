@@ -391,6 +391,26 @@ test('建议里的卡路里数字被剥掉', async () => {
   assert.ok(body.result.fix.rows[0].result.includes('27g'))
 })
 
+test('口径说明按餐次给出不同侧重', async () => {
+  const { handler } = makeCtx()
+  const noteFor = async type => {
+    const { json: body } = await call(handler, 'POST', '/analyze', { type, text: `${type}，鸡蛋一个+玉米一根`, profile: PROFILE })
+    return body.result.plate.note
+  }
+  const breakfast = await noteFor('早餐')
+  const lunch = await noteFor('午餐')
+  const dinner = await noteFor('晚餐')
+  assert.match(breakfast, /早餐也应有蔬果/)
+  assert.match(breakfast, /蛋白质更要盯住/)
+  assert.match(lunch, /午餐最容易做到/)
+  assert.match(dinner, /晚餐清淡少油/)
+  assert.notEqual(breakfast, lunch)
+  assert.notEqual(lunch, dinner)
+  // 早餐的默认点评优先说蛋白
+  const { json: body } = await call(handler, 'POST', '/analyze', { type: '早餐', text: '早餐，白粥一碗+咸菜', profile: PROFILE })
+  assert.match(body.result.exam.insight, /蛋白/)
+})
+
 test('未知路由 404', async () => {
   const { handler } = makeCtx()
   const { status } = await call(handler, 'GET', '/nope')
